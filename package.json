@@ -1,0 +1,21 @@
+{
+  "name": "xiaoshuo-yijian-huanming",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:safari-first",
+    "build:safari-first": "node scripts/build.mjs",
+    "prepare:chromium-load": "node scripts/prepare-manual-load.mjs",
+    "chromium:open": "open -a \"Google Chrome\" \"chrome://extensions/\"",
+    "chromium:ready": "npm run build:safari-first && npm run chromium:open",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.9"
+  }
+}

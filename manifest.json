@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "小说一键换名",
+  "version": "0.2.0",
+  "description": "Safari 首发的阅读换名扩展，在当前阅读网页里无感替换角色名字。",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "小说一键换名",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
