@@ -8,3 +8,11 @@ smoke-artifacts/
 smoke-report.md
 .DS_Store
 coverage
+.trae/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+xcuserdata/
+*.xcuserstate
+*.mobileprovision

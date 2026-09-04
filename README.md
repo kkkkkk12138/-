@@ -2,8 +2,11 @@
 
 Safari 首发的阅读换名扩展。目标是在当前阅读网页里无感替换角色名字，并尽量保持原网页的字体、字号、颜色与排版不变。
 
+普通用户通过 App Store 安装正式产品；GitHub 仓库仅用于开发、构建与发布。
+
 ## 项目结构
 
+- `apple/小说一键换名/`：iOS 与 macOS Safari Extension 的 Xcode 工程
 - `build/webextension/`：标准 WebExtension 核心产物
 - `build/safari-upload/`：上传到 Safari Web Extension Packager 的目录
 - `build/chromium-load/`：Chromium 桌面手工加载目录
@@ -21,13 +24,27 @@ Safari 首发的阅读换名扩展。目标是在当前阅读网页里无感替�
 npm install
 ```
 
-## 构建
+## Safari 开发
+
+首次拉取仓库后：
+
+```bash
+npm install
+npm run apple:sync
+open "apple/小说一键换名/小说一键换名.xcodeproj"
+```
+
+`apple:sync` 会先构建 WebExtension，再将最新资源同步到 Xcode 工程。真机调试或 TestFlight 构建前，开发者还需在 Xcode 的 Signing & Capabilities 中为 App 和 Extension targets 选择自己的 Apple Developer Team。
+
+完整的 Xcode 构建、签名与 Safari 启用步骤见 `docs/safari/XCODE_BUILD_AND_RUN.md`。
+
+## WebExtension 构建
 
 ```bash
 npm run build
 ```
 
-构建后会同时刷新三类产物：
+构建后会刷新三类产物：
 
 - `build/webextension/`
 - `build/safari-upload/`
@@ -35,12 +52,12 @@ npm run build
 
 ## Safari 首发测试
 
-1. 执行 `npm run build`
-2. 使用 `build/safari-upload/` 作为 Safari 打包上传目录
-3. 在 App Store Connect 的 Safari Web Extension Packager 中上传完整扩展文件
+1. 执行 `npm run apple:verify`
+2. 在 Xcode 中选择 iOS Simulator 或 macOS scheme 运行
+3. 真机或归档前选择 Apple Developer Team
 4. 通过 TestFlight 在 iPhone、iPad、Mac 上测试
 
-补充说明见 `docs/safari/APP_STORE_CONNECT_UPLOAD.md`。
+补充说明见 `docs/safari/XCODE_BUILD_AND_RUN.md` 和 `docs/safari/APP_STORE_CONNECT_UPLOAD.md`。
 
 ## Chromium 桌面兼容测试
 
