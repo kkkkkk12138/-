@@ -52,4 +52,13 @@ describe('Apple project helpers', () => {
       '请先运行 npm run apple:generate'
     );
   });
+
+  it('exposes reproducible Apple build commands', async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(process.cwd(), 'package.json'), 'utf8')
+    );
+    expect(packageJson.scripts['apple:build:ios']).toContain('iOS Simulator');
+    expect(packageJson.scripts['apple:build:macos']).toContain('platform=macOS');
+    expect(packageJson.scripts['apple:verify']).toContain('apple:sync');
+  });
 });

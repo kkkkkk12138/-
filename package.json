@@ -11,6 +11,9 @@
     "chromium:ready": "npm run build:safari-first && npm run chromium:open",
     "apple:generate": "node scripts/apple-project.mjs generate",
     "apple:sync": "node scripts/apple-project.mjs sync",
+    "apple:build:ios": "xcodebuild -project \"apple/小说一键换名/小说一键换名.xcodeproj\" -scheme \"小说一键换名 (iOS)\" -destination \"generic/platform=iOS Simulator\" -derivedDataPath \"build/xcode-ios\" CODE_SIGNING_ALLOWED=NO build",
+    "apple:build:macos": "xcodebuild -project \"apple/小说一键换名/小说一键换名.xcodeproj\" -scheme \"小说一键换名 (macOS)\" -destination \"platform=macOS\" -derivedDataPath \"build/xcode-macos\" CODE_SIGNING_ALLOWED=NO build",
+    "apple:verify": "npm test && npm run apple:sync && npm run apple:build:ios && npm run apple:build:macos",
     "test": "vitest run",
     "test:watch": "vitest"
   },
