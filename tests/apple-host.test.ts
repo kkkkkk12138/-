@@ -14,7 +14,8 @@ describe('Safari native host', () => {
 
   it('contains native activation actions for iOS and macOS', async () => {
     const source = await readFile(hostPath, 'utf8');
-    expect(source).toContain('UIApplication.openSettingsURLString');
+    expect(source).toContain('设置 > Apps > Safari > 扩展');
+    expect(source).not.toContain('UIApplication.openSettingsURLString');
     expect(source).toContain('SFSafariApplication.showPreferencesForExtension');
   });
 });

@@ -10,20 +10,17 @@ import AppKit
 typealias PlatformViewController = NSViewController
 #endif
 
-private let extensionBundleIdentifier = "com.xiaoshuo.yijianhuanming.Extension"
-
+#if os(macOS)
 private enum SafariActivation {
+    private static let extensionBundleIdentifier = "com.xiaoshuo.yijianhuanming.Extension"
+
     static func open() {
-#if os(iOS)
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-#elseif os(macOS)
         SFSafariApplication.showPreferencesForExtension(
             withIdentifier: extensionBundleIdentifier
         ) { _ in }
-#endif
     }
 }
+#endif
 
 @available(iOS 15.0, macOS 12.0, *)
 private struct ActivationStep: View {
@@ -74,11 +71,22 @@ private struct HostAppView: View {
                 .padding()
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
 
+#if os(iOS)
+                VStack(spacing: 6) {
+                    Text("请打开：设置 > Apps > Safari > 扩展")
+                        .font(.headline)
+                    Text("Apple 暂不提供直接跳转到 Safari 扩展设置的公开接口。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+#elseif os(macOS)
                 Button("去启用 Safari 扩展") {
                     SafariActivation.open()
                 }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+#endif
 
                 Text("启用一次后，日常使用都在 Safari 阅读页面中完成。")
                     .font(.footnote)
