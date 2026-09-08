@@ -142,9 +142,10 @@
       isObserving = true;
     }
     function stop() {
+      disconnectObserver();
+      engine.applyToDocument(doc, []);
       enabled = false;
       rules = [];
-      disconnectObserver();
       observer = null;
     }
     function runWithoutObserving(work) {

@@ -86,13 +86,13 @@ describe('branding assets', () => {
     ]);
   });
 
-  it('uses a safari-first popup document title', async () => {
+  it('uses the concise product name as the popup document title', async () => {
     const popupHtml = await readFile(
       '/Users/bytedance/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/work-mode-projects/6a91125fbe4e7e0d12c55c2e/popup.html',
       'utf8'
     );
 
-    expect(popupHtml).toContain('<title>小说一键换名 · Safari 首发</title>');
+    expect(popupHtml).toContain('<title>小说一键换名</title>');
   });
 
   it('copies icon files into the manual load bundle', async () => {
