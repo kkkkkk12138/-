@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BrowserApi } from '../src/platform/types';
 import { mountPopup } from '../src/popup/index';
+import type { ContentMessage } from '../src/shared/types';
 
 describe('popup', () => {
   beforeEach(() => {
@@ -48,6 +50,46 @@ describe('popup', () => {
 
     await expect(chrome.storage.local.get('globalRules')).resolves.toEqual({
       globalRules: [{ id: 'test-uuid', source: '沈清辞', target: '林惊鹤' }]
+    });
+  });
+
+  it('Safari 也向当前标签页发送 APPLY_RULES', async () => {
+    const sendMessage = vi.fn(async (_tabId: number, message: ContentMessage) => {
+      if (message.type === 'GET_PAGE_STATE') {
+        return {
+          enabled: false,
+          activeRuleCount: 0,
+          permissionState: 'granted' as const
+        };
+      }
+    });
+    const safariApi: BrowserApi = {
+      family: 'safari',
+      namespace: 'browser',
+      storage: {
+        get: vi.fn(async () => ({ globalRules: [] })),
+        set: vi.fn(async () => undefined)
+      },
+      tabs: {
+        query: vi.fn(async () => [{ id: 7 }]),
+        sendMessage
+      },
+      runtime: {
+        addMessageListener: vi.fn()
+      }
+    };
+
+    const popup = await mountPopup(document.getElementById('app')!, safariApi);
+    popup.addRule();
+    const ruleId = document.querySelector<HTMLElement>('[data-rule-row]')!.dataset.id!;
+    popup.updateRule(ruleId, 'source', '沈清辞');
+    popup.updateRule(ruleId, 'target', '林惊鹤');
+
+    await popup.apply();
+
+    expect(sendMessage).toHaveBeenCalledWith(7, {
+      type: 'APPLY_RULES',
+      rules: [{ id: ruleId, source: '沈清辞', target: '林惊鹤' }]
     });
   });
 

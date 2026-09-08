@@ -117,30 +117,20 @@ async function resolveActiveContext(browserApi: BrowserApi): Promise<{
 
 async function sendTabMessage(
   browserApi: BrowserApi,
-  browserFamily: BrowserFamily,
   tabId: number | null,
   message: ContentMessage
 ): Promise<PageRuntimeState | void> {
-  if (tabId === null || browserFamily === 'safari') {
-    return DEFAULT_PAGE_STATE;
+  if (tabId === null) {
+    throw new Error('当前页面不可用');
   }
 
-  try {
-    return await browserApi.tabs.sendMessage(tabId, message);
-  } catch (error) {
-    if (message.type === 'GET_PAGE_STATE') {
-      return {
-        ...DEFAULT_PAGE_STATE,
-        permissionState: 'needs-user-action'
-      };
-    }
-
-    throw error;
-  }
+  return browserApi.tabs.sendMessage(tabId, message);
 }
 
-export async function mountPopup(root: HTMLElement): Promise<PopupApi> {
-  const browserApi = createBrowserApi();
+export async function mountPopup(
+  root: HTMLElement,
+  browserApi: BrowserApi = createBrowserApi()
+): Promise<PopupApi> {
   const [activeContext, storedRules] = await Promise.all([resolveActiveContext(browserApi), loadRules(browserApi)]);
 
   const state: PopupState = {
@@ -287,21 +277,15 @@ export async function mountPopup(root: HTMLElement): Promise<PopupApi> {
   async function apply(): Promise<ReplaceRule[]> {
     const normalized = await persistRules();
 
-    if (state.browserFamily === 'safari' || state.permissionState === 'needs-user-action') {
-      state.enabled = false;
-      render();
-      return normalized;
-    }
-
     if (normalized.length === 0) {
       state.enabled = false;
-      await sendTabMessage(browserApi, state.browserFamily, state.tabId, { type: 'DISABLE_PAGE' });
+      await sendTabMessage(browserApi, state.tabId, { type: 'DISABLE_PAGE' });
       render();
       return normalized;
     }
 
     try {
-      await sendTabMessage(browserApi, state.browserFamily, state.tabId, {
+      await sendTabMessage(browserApi, state.tabId, {
         type: 'APPLY_RULES',
         rules: normalized
       });
@@ -319,16 +303,10 @@ export async function mountPopup(root: HTMLElement): Promise<PopupApi> {
 
     if (!enabled) {
       try {
-        await sendTabMessage(browserApi, state.browserFamily, state.tabId, { type: 'DISABLE_PAGE' });
+        await sendTabMessage(browserApi, state.tabId, { type: 'DISABLE_PAGE' });
       } finally {
         render();
       }
-      return;
-    }
-
-    if (state.browserFamily === 'safari' || state.permissionState === 'needs-user-action') {
-      state.enabled = false;
-      render();
       return;
     }
 
@@ -341,7 +319,7 @@ export async function mountPopup(root: HTMLElement): Promise<PopupApi> {
     }
 
     try {
-      await sendTabMessage(browserApi, state.browserFamily, state.tabId, {
+      await sendTabMessage(browserApi, state.tabId, {
         type: 'APPLY_RULES',
         rules: normalized
       });
