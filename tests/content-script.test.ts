@@ -68,6 +68,8 @@ describe('content script', () => {
 
     await runtime.handleMessage({ type: 'DISABLE_PAGE' });
 
+    expect(document.getElementById('line')?.textContent).toBe('沈清辞又回来了。');
+
     expect(await runtime.handleMessage({ type: 'GET_PAGE_STATE' })).toEqual({
       enabled: false,
       activeRuleCount: 0,

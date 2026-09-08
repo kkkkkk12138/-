@@ -42,9 +42,10 @@ export function mountContentScript(doc: Document = document): ContentScriptRunti
   }
 
   function stop(): void {
+    disconnectObserver();
+    engine.applyToDocument(doc, []);
     enabled = false;
     rules = [];
-    disconnectObserver();
     observer = null;
   }
 
