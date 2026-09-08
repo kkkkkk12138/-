@@ -8,7 +8,7 @@ Safari 首发的阅读换名扩展。目标是在当前阅读网页里无感替�
 
 - `apple/小说一键换名/`：iOS 与 macOS Safari Extension 的 Xcode 工程
 - `build/webextension/`：标准 WebExtension 核心产物
-- `build/safari-upload/`：上传到 Safari Web Extension Packager 的目录
+- `build/safari-upload/`：同步到 Xcode 工程的 Safari 扩展资源
 - `build/chromium-load/`：Chromium 桌面手工加载目录
 
 ## 安装依赖
@@ -53,9 +53,10 @@ npm run build
 ## Safari 首发测试
 
 1. 执行 `npm run apple:verify`
-2. 在 Xcode 中选择 iOS Simulator 或 macOS scheme 运行
-3. 真机或归档前选择 Apple Developer Team
-4. 通过 TestFlight 在 iPhone、iPad、Mac 上测试
+2. 执行 `npm run testflight:preflight`
+3. 在 Xcode 中选择 iOS Simulator 或 macOS scheme 运行
+4. 真机或归档前选择 Apple Developer Team
+5. 通过 Xcode Archive 上传 TestFlight，在 iPhone、iPad、Mac 上测试
 
 补充说明见 `docs/safari/XCODE_BUILD_AND_RUN.md` 和 `docs/safari/APP_STORE_CONNECT_UPLOAD.md`。
 
@@ -107,4 +108,3 @@ npm test
 - 若替换后的名字长度差异较大，网页换行可能发生正常重排
 - Canvas、Shadow DOM、图片文字、部分极端前端框架渲染内容不保证覆盖
 - 如果用户把高频普通词当作规则源文本，仍可能产生误替换
-- 关闭 `本页启用` 后只停止后续处理，不自动恢复当前页已改写文本

@@ -60,5 +60,6 @@ describe('Apple project helpers', () => {
     expect(packageJson.scripts['apple:build:ios']).toContain('iOS Simulator');
     expect(packageJson.scripts['apple:build:macos']).toContain('platform=macOS');
     expect(packageJson.scripts['apple:verify']).toContain('apple:sync');
+    expect(packageJson.scripts['testflight:preflight']).toContain('testflight-preflight.mjs');
   });
 });
