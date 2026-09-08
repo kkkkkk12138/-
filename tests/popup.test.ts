@@ -40,7 +40,38 @@ describe('popup', () => {
     expect(document.querySelector('[data-role="apply"]')).not.toBeNull();
   });
 
-  it('成功应用后自动收起编辑器', async () => {
+  it('已有规则时默认完整显示摘要列表', async () => {
+    await chrome.storage.local.set({
+      globalRules: [
+        { id: 'r1', source: '沈清辞', target: '林惊鹤' },
+        { id: 'r2', source: '顾怀安', target: '江望舒' }
+      ]
+    });
+
+    await mountPopup(document.getElementById('app')!);
+
+    expect(document.querySelectorAll('[data-rule-summary]')).toHaveLength(2);
+    expect(document.body.textContent).toContain('沈清辞');
+    expect(document.body.textContent).toContain('江望舒');
+    expect(document.querySelector('[data-role="open-editor"]')).toBeNull();
+  });
+
+  it('点击摘要后仅该行进入编辑状态', async () => {
+    await chrome.storage.local.set({
+      globalRules: [
+        { id: 'r1', source: '沈清辞', target: '林惊鹤' },
+        { id: 'r2', source: '顾怀安', target: '江望舒' }
+      ]
+    });
+
+    await mountPopup(document.getElementById('app')!);
+    (document.querySelector('[data-edit="r1"]') as HTMLButtonElement).click();
+
+    expect(document.querySelector('[data-rule-editor-row][data-id="r1"]')).not.toBeNull();
+    expect(document.querySelector('[data-rule-summary][data-id="r2"]')).not.toBeNull();
+  });
+
+  it('成功应用后保留摘要列表', async () => {
     const popup = await mountPopup(document.getElementById('app')!);
     popup.addRule();
     const ruleId = document.querySelector<HTMLElement>('[data-rule-row]')!.dataset.id!;
@@ -49,8 +80,50 @@ describe('popup', () => {
 
     await popup.apply();
 
-    expect(document.querySelector('[data-rule-editor]')).toBeNull();
-    expect(document.querySelector('[data-role="open-editor"]')).not.toBeNull();
+    expect(document.querySelector('[data-rule-summary]')).not.toBeNull();
+    expect(document.querySelector('[data-role="open-editor"]')).toBeNull();
+  });
+
+  it('切换编辑规则时保留前一行输入', async () => {
+    await chrome.storage.local.set({
+      globalRules: [
+        { id: 'r1', source: '沈清辞', target: '林惊鹤' },
+        { id: 'r2', source: '顾怀安', target: '江望舒' }
+      ]
+    });
+
+    const popup = await mountPopup(document.getElementById('app')!);
+    (document.querySelector('[data-edit="r1"]') as HTMLButtonElement).click();
+    popup.updateRule('r1', 'target', '周既明');
+    (document.querySelector('[data-edit="r2"]') as HTMLButtonElement).click();
+
+    expect(document.querySelector('[data-rule-summary][data-id="r1"]')?.textContent).toContain('周既明');
+    expect(document.querySelector('[data-rule-editor-row][data-id="r2"]')).not.toBeNull();
+  });
+
+  it('新增规则后在列表末尾进入编辑状态', async () => {
+    await chrome.storage.local.set({
+      globalRules: [{ id: 'r1', source: '沈清辞', target: '林惊鹤' }]
+    });
+    const popup = await mountPopup(document.getElementById('app')!);
+
+    popup.addRule();
+
+    const rows = document.querySelectorAll('[data-rule-row]');
+    expect(rows).toHaveLength(2);
+    expect(rows[1].matches('[data-rule-editor-row]')).toBe(true);
+  });
+
+  it('删除最后一条规则后显示待应用空态', async () => {
+    await chrome.storage.local.set({
+      globalRules: [{ id: 'r1', source: '沈清辞', target: '林惊鹤' }]
+    });
+    const popup = await mountPopup(document.getElementById('app')!);
+
+    popup.removeRule('r1');
+
+    expect(document.querySelector('[data-empty-pending]')).not.toBeNull();
+    expect(document.querySelector('[data-role="apply"]')).not.toBeNull();
   });
 
   it('应用失败时保留编辑器与输入内容', async () => {

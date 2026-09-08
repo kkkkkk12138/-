@@ -8,7 +8,8 @@ type RuleField = 'source' | 'target';
 type PopupState = {
   rules: ReplaceRule[];
   tabId: number | null;
-  expanded: boolean;
+  editingRuleId: string | null;
+  hasPendingChanges: boolean;
   errorMessage: string;
   isApplying: boolean;
 };
@@ -37,9 +38,21 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function renderRuleRow(rule: ReplaceRule): string {
+function renderRuleSummary(rule: ReplaceRule): string {
   return `
-    <div class="rule-row" data-rule-row data-id="${rule.id}">
+    <div class="rule-summary" data-rule-row data-rule-summary data-id="${rule.id}">
+      <span class="rule-summary__name" title="${escapeHtml(rule.source)}">${escapeHtml(rule.source)}</span>
+      <span class="rule-summary__arrow" aria-hidden="true">→</span>
+      <span class="rule-summary__name" title="${escapeHtml(rule.target)}">${escapeHtml(rule.target)}</span>
+      <button class="rule-summary__edit" data-edit="${rule.id}" type="button"
+        aria-label="编辑 ${escapeHtml(rule.source)} 到 ${escapeHtml(rule.target)}">编辑</button>
+    </div>
+  `;
+}
+
+function renderRuleEditor(rule: ReplaceRule): string {
+  return `
+    <div class="rule-row rule-editor" data-rule-row data-rule-editor-row data-id="${rule.id}">
       <input class="rule-row__input" data-field="source" data-id="${rule.id}"
         value="${escapeHtml(rule.source)}" placeholder="原名" />
       <span class="rule-row__arrow" aria-hidden="true">→</span>
@@ -49,6 +62,14 @@ function renderRuleRow(rule: ReplaceRule): string {
         aria-label="删除规则">删除</button>
     </div>
   `;
+}
+
+function renderRuleList(state: PopupState): string {
+  return state.rules
+    .map((rule) =>
+      state.editingRuleId === rule.id ? renderRuleEditor(rule) : renderRuleSummary(rule)
+    )
+    .join('');
 }
 
 function isUnavailableBrowserMethod(error: unknown): boolean {
@@ -148,13 +169,14 @@ export async function mountPopup(
   const state: PopupState = {
     rules: storedRules,
     tabId: activeContext.tabId,
-    expanded: false,
+    editingRuleId: null,
+    hasPendingChanges: false,
     errorMessage: '',
     isApplying: false
   };
 
   function render(): void {
-    if (!state.expanded) {
+    if (state.rules.length === 0 && !state.hasPendingChanges) {
       root.innerHTML = `
         <section class="popup popup--collapsed">
           <button class="popup__open" data-role="open-editor" type="button">
@@ -172,8 +194,16 @@ export async function mountPopup(
 
     root.innerHTML = `
       <section class="popup" data-rule-editor>
+        <header class="popup__header">
+          <strong>换名规则</strong>
+          <span class="popup__count">${state.rules.length} 条</span>
+        </header>
         <div class="popup__list">
-          ${state.rules.map(renderRuleRow).join('')}
+          ${
+            state.rules.length > 0
+              ? renderRuleList(state)
+              : '<p class="popup__empty" data-empty-pending>暂无规则</p>'
+          }
         </div>
         ${
           state.errorMessage
@@ -181,10 +211,10 @@ export async function mountPopup(
             : ''
         }
         <footer class="popup__footer">
-          <button data-role="add" type="button">再加一条</button>
+          <button data-role="add" type="button">添加规则</button>
           <button class="popup__primary" data-role="apply" type="button" ${
             state.isApplying ? 'disabled' : ''
-          }>${state.isApplying ? '正在生效…' : '立即生效'}</button>
+          }>${state.isApplying ? '正在生效…' : '全部生效'}</button>
         </footer>
       </section>
     `;
@@ -196,6 +226,13 @@ export async function mountPopup(
     root
       .querySelector<HTMLButtonElement>('[data-role="apply"]')
       ?.addEventListener('click', () => void apply());
+
+    root.querySelectorAll<HTMLButtonElement>('[data-edit]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.editingRuleId = button.dataset.edit ?? null;
+        render();
+      });
+    });
 
     root.querySelectorAll<HTMLInputElement>('[data-field]').forEach((input) => {
       input.addEventListener('input', (event) => {
@@ -212,24 +249,28 @@ export async function mountPopup(
   }
 
   function addRule(): void {
-    state.rules = [...state.rules, createEmptyRule()];
-    state.expanded = true;
+    const rule = createEmptyRule();
+    state.rules = [...state.rules, rule];
+    state.editingRuleId = rule.id;
+    state.hasPendingChanges = true;
     state.errorMessage = '';
     render();
+    root
+      .querySelector<HTMLInputElement>(`[data-field="source"][data-id="${rule.id}"]`)
+      ?.focus();
   }
 
   function removeRule(id: string): void {
     state.rules = state.rules.filter((rule) => rule.id !== id);
-
-    if (state.rules.length === 0) {
-      state.rules = [createEmptyRule()];
-    }
-
+    state.editingRuleId = null;
+    state.hasPendingChanges = true;
+    state.errorMessage = '';
     render();
   }
 
   function updateRule(id: string, field: RuleField, value: string): void {
     state.rules = state.rules.map((rule) => (rule.id === id ? { ...rule, [field]: value } : rule));
+    state.hasPendingChanges = true;
   }
 
   async function persistRules(): Promise<ReplaceRule[]> {
@@ -256,12 +297,12 @@ export async function mountPopup(
       }
 
       state.isApplying = false;
-      state.expanded = false;
+      state.editingRuleId = null;
+      state.hasPendingChanges = false;
       render();
       return normalized;
     } catch {
       state.isApplying = false;
-      state.expanded = true;
       state.errorMessage = '请允许扩展访问当前网站后重试';
       render();
       return normalizeRules(state.rules);
