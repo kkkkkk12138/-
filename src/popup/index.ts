@@ -1,17 +1,16 @@
 import { createBrowserApi } from '../platform/browserApi';
 import type { BrowserApi, BrowserFamily } from '../platform/types';
 import { createEmptyRule, normalizeRules } from '../shared/rules';
-import type { ContentMessage, PageRuntimeState, PermissionState, ReplaceRule } from '../shared/types';
-import { getOnboardingContent } from './onboarding';
+import type { ContentMessage, PageRuntimeState, ReplaceRule } from '../shared/types';
 
 type RuleField = 'source' | 'target';
 
 type PopupState = {
   rules: ReplaceRule[];
-  enabled: boolean;
   tabId: number | null;
-  browserFamily: BrowserFamily;
-  permissionState: PermissionState;
+  expanded: boolean;
+  errorMessage: string;
+  isApplying: boolean;
 };
 
 type PopupApi = {
@@ -19,7 +18,6 @@ type PopupApi = {
   removeRule: (id: string) => void;
   updateRule: (id: string, field: RuleField, value: string) => void;
   apply: () => Promise<ReplaceRule[]>;
-  setEnabled: (enabled: boolean) => Promise<void>;
 };
 
 const DEFAULT_PAGE_STATE: PageRuntimeState = {
@@ -37,6 +35,20 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function renderRuleRow(rule: ReplaceRule): string {
+  return `
+    <div class="rule-row" data-rule-row data-id="${rule.id}">
+      <input class="rule-row__input" data-field="source" data-id="${rule.id}"
+        value="${escapeHtml(rule.source)}" placeholder="原名" />
+      <span class="rule-row__arrow" aria-hidden="true">→</span>
+      <input class="rule-row__input" data-field="target" data-id="${rule.id}"
+        value="${escapeHtml(rule.target)}" placeholder="替换成" />
+      <button class="rule-row__remove" data-remove="${rule.id}" type="button"
+        aria-label="删除规则">删除</button>
+    </div>
+  `;
 }
 
 function isUnavailableBrowserMethod(error: unknown): boolean {
@@ -134,88 +146,45 @@ export async function mountPopup(
   const [activeContext, storedRules] = await Promise.all([resolveActiveContext(browserApi), loadRules(browserApi)]);
 
   const state: PopupState = {
-    rules: storedRules.length > 0 ? storedRules : [createEmptyRule()],
-    enabled: activeContext.pageState.enabled,
+    rules: storedRules,
     tabId: activeContext.tabId,
-    browserFamily: activeContext.browserFamily,
-    permissionState: activeContext.pageState.permissionState
+    expanded: false,
+    errorMessage: '',
+    isApplying: false
   };
 
-  function getNormalizedRules(): ReplaceRule[] {
-    return normalizeRules(state.rules);
-  }
-
   function render(): void {
-    const activeRuleCount = getNormalizedRules().length;
-    const onboarding = getOnboardingContent(state.browserFamily, state.permissionState);
-    const disableActiveControls = state.browserFamily === 'safari' || state.permissionState === 'needs-user-action';
+    if (!state.expanded) {
+      root.innerHTML = `
+        <section class="popup popup--collapsed">
+          <button class="popup__open" data-role="open-editor" type="button">
+            <span aria-hidden="true">＋</span>
+            添加规则
+          </button>
+        </section>
+      `;
+
+      root
+        .querySelector<HTMLButtonElement>('[data-role="open-editor"]')
+        ?.addEventListener('click', addRule);
+      return;
+    }
 
     root.innerHTML = `
-      <section class="popup">
-        <header class="popup__header">
-          <div class="popup__header-copy">
-            <h1 class="popup__title">小说一键换名</h1>
-            <p class="popup__subtitle">${escapeHtml(onboarding.subhead)}</p>
-          </div>
-          <label class="popup__toggle">
-            <input
-              type="checkbox"
-              data-role="enabled"
-              ${state.enabled ? 'checked' : ''}
-              ${disableActiveControls ? 'disabled' : ''}
-            />
-            <span>本页启用</span>
-          </label>
-        </header>
-
-        <div class="popup__meta">
-          <span class="popup__badge">有效规则 ${activeRuleCount}</span>
-          <span class="popup__status-text">${state.enabled ? '当前页已启用' : '当前页未启用'}</span>
-        </div>
-
-        <section class="popup__status" data-role="status">
-          <p class="popup__status-title">${escapeHtml(onboarding.title)}</p>
-          <p class="popup__status-body">${escapeHtml(onboarding.detail)}</p>
-          <p class="popup__status-hint">${escapeHtml(onboarding.hint)}</p>
-        </section>
-
-        <section class="popup__section">
-          <div class="popup__section-title">换名规则</div>
-          <p class="popup__section-desc">规则会保存在本地，仅在你手动对当前页面生效时应用。</p>
-        </section>
-
+      <section class="popup" data-rule-editor>
         <div class="popup__list">
-          ${state.rules
-            .map(
-              (rule, index) => `
-                <div class="rule-row" data-rule-row data-id="${rule.id}">
-                  <span class="rule-row__index">${index + 1}</span>
-                  <input
-                    class="rule-row__input"
-                    data-field="source"
-                    data-id="${rule.id}"
-                    value="${escapeHtml(rule.source)}"
-                    placeholder="原名"
-                  />
-                  <input
-                    class="rule-row__input"
-                    data-field="target"
-                    data-id="${rule.id}"
-                    value="${escapeHtml(rule.target)}"
-                    placeholder="替换成"
-                  />
-                  <button class="rule-row__remove" data-remove="${rule.id}" type="button">删</button>
-                </div>
-              `
-            )
-            .join('')}
+          ${state.rules.map(renderRuleRow).join('')}
         </div>
-
+        ${
+          state.errorMessage
+            ? `<p class="popup__error" role="alert">${escapeHtml(state.errorMessage)}</p>`
+            : ''
+        }
         <footer class="popup__footer">
-          <button data-role="add" type="button">新增一条</button>
+          <button data-role="add" type="button">再加一条</button>
           <button class="popup__primary" data-role="apply" type="button" ${
-            disableActiveControls ? 'disabled' : ''
-          }>立即生效</button>
+            state.isApplying ? 'disabled' : ''
+          }>${state.isApplying ? '正在生效…' : '立即生效'}</button>
         </footer>
       </section>
     `;
@@ -227,13 +196,6 @@ export async function mountPopup(
     root
       .querySelector<HTMLButtonElement>('[data-role="apply"]')
       ?.addEventListener('click', () => void apply());
-
-    root
-      .querySelector<HTMLInputElement>('[data-role="enabled"]')
-      ?.addEventListener('change', (event) => {
-        const target = event.currentTarget as HTMLInputElement;
-        void setEnabled(target.checked);
-      });
 
     root.querySelectorAll<HTMLInputElement>('[data-field]').forEach((input) => {
       input.addEventListener('input', (event) => {
@@ -251,6 +213,8 @@ export async function mountPopup(
 
   function addRule(): void {
     state.rules = [...state.rules, createEmptyRule()];
+    state.expanded = true;
+    state.errorMessage = '';
     render();
   }
 
@@ -270,65 +234,38 @@ export async function mountPopup(
 
   async function persistRules(): Promise<ReplaceRule[]> {
     const normalized = await saveRules(browserApi, state.rules);
-    state.rules = normalized.length > 0 ? normalized : [createEmptyRule()];
+    state.rules = normalized;
     return normalized;
   }
 
   async function apply(): Promise<ReplaceRule[]> {
-    const normalized = await persistRules();
+    state.isApplying = true;
+    state.errorMessage = '';
+    render();
 
-    if (normalized.length === 0) {
-      state.enabled = false;
-      await sendTabMessage(browserApi, state.tabId, { type: 'DISABLE_PAGE' });
+    try {
+      const normalized = await persistRules();
+
+      if (normalized.length === 0) {
+        await sendTabMessage(browserApi, state.tabId, { type: 'DISABLE_PAGE' });
+      } else {
+        await sendTabMessage(browserApi, state.tabId, {
+          type: 'APPLY_RULES',
+          rules: normalized
+        });
+      }
+
+      state.isApplying = false;
+      state.expanded = false;
       render();
       return normalized;
-    }
-
-    try {
-      await sendTabMessage(browserApi, state.tabId, {
-        type: 'APPLY_RULES',
-        rules: normalized
-      });
-      state.enabled = true;
     } catch {
-      state.enabled = false;
-    }
-
-    render();
-    return normalized;
-  }
-
-  async function setEnabled(enabled: boolean): Promise<void> {
-    state.enabled = enabled;
-
-    if (!enabled) {
-      try {
-        await sendTabMessage(browserApi, state.tabId, { type: 'DISABLE_PAGE' });
-      } finally {
-        render();
-      }
-      return;
-    }
-
-    const normalized = await persistRules();
-
-    if (normalized.length === 0) {
-      state.enabled = false;
+      state.isApplying = false;
+      state.expanded = true;
+      state.errorMessage = '请允许扩展访问当前网站后重试';
       render();
-      return;
+      return normalizeRules(state.rules);
     }
-
-    try {
-      await sendTabMessage(browserApi, state.tabId, {
-        type: 'APPLY_RULES',
-        rules: normalized
-      });
-      state.enabled = true;
-    } catch {
-      state.enabled = false;
-    }
-
-    render();
   }
 
   render();
@@ -337,8 +274,7 @@ export async function mountPopup(
     addRule,
     removeRule,
     updateRule,
-    apply,
-    setEnabled
+    apply
   };
 }
 
