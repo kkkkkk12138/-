@@ -172,9 +172,20 @@
   function escapeHtml(value) {
     return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
-  function renderRuleRow(rule) {
+  function renderRuleSummary(rule) {
     return `
-    <div class="rule-row" data-rule-row data-id="${rule.id}">
+    <div class="rule-summary" data-rule-row data-rule-summary data-id="${rule.id}">
+      <span class="rule-summary__name" title="${escapeHtml(rule.source)}">${escapeHtml(rule.source)}</span>
+      <span class="rule-summary__arrow" aria-hidden="true">\u2192</span>
+      <span class="rule-summary__name" title="${escapeHtml(rule.target)}">${escapeHtml(rule.target)}</span>
+      <button class="rule-summary__edit" data-edit="${rule.id}" type="button"
+        aria-label="\u7F16\u8F91 ${escapeHtml(rule.source)} \u5230 ${escapeHtml(rule.target)}">\u7F16\u8F91</button>
+    </div>
+  `;
+  }
+  function renderRuleEditor(rule) {
+    return `
+    <div class="rule-row rule-editor" data-rule-row data-rule-editor-row data-id="${rule.id}">
       <input class="rule-row__input" data-field="source" data-id="${rule.id}"
         value="${escapeHtml(rule.source)}" placeholder="\u539F\u540D" />
       <span class="rule-row__arrow" aria-hidden="true">\u2192</span>
@@ -184,6 +195,11 @@
         aria-label="\u5220\u9664\u89C4\u5219">\u5220\u9664</button>
     </div>
   `;
+  }
+  function renderRuleList(state) {
+    return state.rules.map(
+      (rule) => state.editingRuleId === rule.id ? renderRuleEditor(rule) : renderRuleSummary(rule)
+    ).join("");
   }
   function isUnavailableBrowserMethod(error) {
     return error instanceof Error && error.message.includes("Browser API method is unavailable");
@@ -259,12 +275,13 @@
     const state = {
       rules: storedRules,
       tabId: activeContext.tabId,
-      expanded: false,
+      editingRuleId: null,
+      hasPendingChanges: false,
       errorMessage: "",
       isApplying: false
     };
     function render() {
-      if (!state.expanded) {
+      if (state.rules.length === 0 && !state.hasPendingChanges) {
         root.innerHTML = `
         <section class="popup popup--collapsed">
           <button class="popup__open" data-role="open-editor" type="button">
@@ -278,13 +295,17 @@
       }
       root.innerHTML = `
       <section class="popup" data-rule-editor>
+        <header class="popup__header">
+          <strong>\u6362\u540D\u89C4\u5219</strong>
+          <span class="popup__count">${state.rules.length} \u6761</span>
+        </header>
         <div class="popup__list">
-          ${state.rules.map(renderRuleRow).join("")}
+          ${state.rules.length > 0 ? renderRuleList(state) : '<p class="popup__empty" data-empty-pending>\u6682\u65E0\u89C4\u5219</p>'}
         </div>
         ${state.errorMessage ? `<p class="popup__error" role="alert">${escapeHtml(state.errorMessage)}</p>` : ""}
         <footer class="popup__footer">
-          <button data-role="add" type="button">\u518D\u52A0\u4E00\u6761</button>
-          <button class="popup__primary" data-role="apply" type="button" ${state.isApplying ? "disabled" : ""}>${state.isApplying ? "\u6B63\u5728\u751F\u6548\u2026" : "\u7ACB\u5373\u751F\u6548"}</button>
+          <button data-role="add" type="button">\u6DFB\u52A0\u89C4\u5219</button>
+          <button class="popup__primary" data-role="apply" type="button" ${state.isApplying ? "disabled" : ""}>${state.isApplying ? "\u6B63\u5728\u751F\u6548\u2026" : "\u5168\u90E8\u751F\u6548"}</button>
         </footer>
       </section>
     `;
@@ -292,6 +313,12 @@
         addRule();
       });
       root.querySelector('[data-role="apply"]')?.addEventListener("click", () => void apply());
+      root.querySelectorAll("[data-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.editingRuleId = button.dataset.edit ?? null;
+          render();
+        });
+      });
       root.querySelectorAll("[data-field]").forEach((input) => {
         input.addEventListener("input", (event) => {
           const target = event.currentTarget;
@@ -305,20 +332,24 @@
       });
     }
     function addRule() {
-      state.rules = [...state.rules, createEmptyRule()];
-      state.expanded = true;
+      const rule = createEmptyRule();
+      state.rules = [...state.rules, rule];
+      state.editingRuleId = rule.id;
+      state.hasPendingChanges = true;
       state.errorMessage = "";
       render();
+      root.querySelector(`[data-field="source"][data-id="${rule.id}"]`)?.focus();
     }
     function removeRule(id) {
       state.rules = state.rules.filter((rule) => rule.id !== id);
-      if (state.rules.length === 0) {
-        state.rules = [createEmptyRule()];
-      }
+      state.editingRuleId = null;
+      state.hasPendingChanges = true;
+      state.errorMessage = "";
       render();
     }
     function updateRule(id, field, value) {
       state.rules = state.rules.map((rule) => rule.id === id ? { ...rule, [field]: value } : rule);
+      state.hasPendingChanges = true;
     }
     async function persistRules() {
       const normalized = await saveRules(browserApi, state.rules);
@@ -340,12 +371,12 @@
           });
         }
         state.isApplying = false;
-        state.expanded = false;
+        state.editingRuleId = null;
+        state.hasPendingChanges = false;
         render();
         return normalized;
       } catch {
         state.isApplying = false;
-        state.expanded = true;
         state.errorMessage = "\u8BF7\u5141\u8BB8\u6269\u5C55\u8BBF\u95EE\u5F53\u524D\u7F51\u7AD9\u540E\u91CD\u8BD5";
         render();
         return normalizeRules(state.rules);
