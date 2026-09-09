@@ -8,8 +8,8 @@ describe('Android project', () => {
     expect(build).toContain('compileSdk = 36');
     expect(build).toContain('minSdk = 26');
     expect(build).toContain('targetSdk = 36');
-    expect(build).toContain('versionCode = 1');
-    expect(build).toContain('versionName = "0.1.0"');
+    expect(build).toContain('versionCode = 2');
+    expect(build).toContain('versionName = "0.1.1"');
   });
 
   it('does not request sensitive permissions', async () => {
