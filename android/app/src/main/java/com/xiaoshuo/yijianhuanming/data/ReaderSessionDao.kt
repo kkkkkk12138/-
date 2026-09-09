@@ -15,4 +15,7 @@ interface ReaderSessionDao {
 
     @Query("SELECT * FROM reader_sessions WHERE sourceId = :sourceId LIMIT 1")
     suspend fun findBySourceId(sourceId: String): ReaderSessionEntity?
+
+    @Query("DELETE FROM reader_sessions")
+    suspend fun clear()
 }

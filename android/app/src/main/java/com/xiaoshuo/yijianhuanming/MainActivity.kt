@@ -4,12 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xiaoshuo.yijianhuanming.intake.AndroidInputResolver
 import com.xiaoshuo.yijianhuanming.intake.ReaderInput
 import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
@@ -23,6 +27,12 @@ import com.xiaoshuo.yijianhuanming.data.ReaderSessionDao
 import com.xiaoshuo.yijianhuanming.data.ReaderSessionEntity
 import com.xiaoshuo.yijianhuanming.reader.HomeScreen
 import com.xiaoshuo.yijianhuanming.reader.ReaderScreen
+import com.xiaoshuo.yijianhuanming.reader.ReaderSettingsSheet
+import com.xiaoshuo.yijianhuanming.library.LibraryViewModel
+import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
+import com.xiaoshuo.yijianhuanming.navigation.AppNavHost
+import com.xiaoshuo.yijianhuanming.navigation.NameReplacerTheme
+import com.xiaoshuo.yijianhuanming.navigation.ReaderDestinationState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -50,11 +60,74 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        savedInstanceState?.let(::restoreReaderInput)
         setContent {
-            when (val input = readerInput) {
+            val libraryViewModel: LibraryViewModel = viewModel()
+            val libraryState by libraryViewModel.state.collectAsState()
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            NameReplacerTheme(darkTheme = isSystemInDarkTheme()) {
+                AppNavHost(
+                    destination = readerInput?.toDestinationState(),
+                    library = {
+                        AdaptiveReaderChrome(
+                            supportingContent = {
+                                ReaderSettingsSheet(
+                                    onClearHistory = {
+                                        scope.launch { libraryViewModel.clearHistory() }
+                                    },
+                                    onClearRules = {
+                                        scope.launch { libraryViewModel.clearRules(null) }
+                                    },
+                                    onClearEpubCache = {
+                                        scope.launch { libraryViewModel.clearEpubCache() }
+                                    },
+                                )
+                            },
+                        ) {
+                            HomeScreen(
+                                onOpenUrl = {},
+                                onOpenDocument = {
+                                    openDocument.launch(
+                                        arrayOf("text/plain", "application/epub+zip"),
+                                    )
+                                },
+                                recent = libraryState.recent,
+                                onOpenRecent = { openRecent(it) },
+                            )
+                        }
+                    },
+                    reader = {
+                        ReaderContent(
+                            input = readerInput,
+                            onClearHistory = {
+                                scope.launch { libraryViewModel.clearHistory() }
+                            },
+                            onClearEpubCache = {
+                                scope.launch { libraryViewModel.clearEpubCache() }
+                            },
+                        )
+                    },
+                )
+            }
+        }
+        if (savedInstanceState == null && intent.action != Intent.ACTION_MAIN) {
+            resolveInput(intent)
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun ReaderContent(
+        input: ReaderInput?,
+        onClearHistory: () -> Unit,
+        onClearEpubCache: () -> Unit,
+    ) {
+        when (input) {
                 is ReaderInput.WebUrl -> ReaderScreen(
                     url = input.uri.toString(),
                     onClose = { readerInput = null },
+                    onClearHistory = onClearHistory,
+                    onClearEpubCache = onClearEpubCache,
                 )
                 is ReaderInput.TxtDocument -> txtDocument?.let { document ->
                     ReaderScreen(
@@ -62,6 +135,8 @@ class MainActivity : ComponentActivity() {
                         profile = WebViewProfile.LOCAL_READER,
                         txtPathHandler = document.pathHandler,
                         onClose = ::closeTxt,
+                        onClearHistory = onClearHistory,
+                        onClearEpubCache = onClearEpubCache,
                     )
                 } ?: HomeScreen(
                     onOpenUrl = {},
@@ -76,28 +151,37 @@ class MainActivity : ComponentActivity() {
                             persistEpubLocation(input, document, location)
                         },
                         onClose = ::closeEpub,
+                        onClearHistory = onClearHistory,
+                        onClearEpubCache = onClearEpubCache,
                     )
                 } ?: HomeScreen(
                     onOpenUrl = {},
                     onOpenDocument = {},
                 )
-                else -> HomeScreen(
-                    onOpenUrl = {},
-                    onOpenDocument = {
-                        openDocument.launch(arrayOf("text/plain", "application/epub+zip"))
-                    },
-                )
+                else -> Unit
             }
-        }
-        if (savedInstanceState == null && intent.action != Intent.ACTION_MAIN) {
-            resolveInput(intent)
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         resolveInput(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        readerInput?.let { input ->
+            outState.putString(STATE_INPUT_TYPE, input.toDestinationState().inputType)
+            outState.putString(STATE_INPUT_URI, input.toDestinationState().uri)
+            outState.putBoolean(
+                STATE_PERSISTED_PERMISSION,
+                when (input) {
+                    is ReaderInput.TxtDocument -> input.persistedReadPermission
+                    is ReaderInput.EpubDocument -> input.persistedReadPermission
+                    is ReaderInput.WebUrl -> false
+                },
+            )
+        }
     }
 
     private fun resolveInput(intent: Intent) {
@@ -119,6 +203,7 @@ class MainActivity : ComponentActivity() {
             is ReaderInput.WebUrl -> {
                 if (input.uri.scheme.equals("https", ignoreCase = true)) {
                     readerInput = input
+                    persistBasicSession(input.uri.toString(), "WEB", input.uri.host.orEmpty())
                 } else {
                     Toast.makeText(this, "HTTP 页面需要明确确认", Toast.LENGTH_LONG).show()
                 }
@@ -126,6 +211,31 @@ class MainActivity : ComponentActivity() {
             is ReaderInput.TxtDocument -> openTxt(input)
             is ReaderInput.EpubDocument -> openEpub(input)
         }
+    }
+
+    private fun restoreReaderInput(state: Bundle) {
+        val type = state.getString(STATE_INPUT_TYPE) ?: return
+        val uri = state.getString(STATE_INPUT_URI)?.let(android.net.Uri::parse) ?: return
+        val persisted = state.getBoolean(STATE_PERSISTED_PERMISSION)
+        onReaderInput(
+            when (type) {
+                "WEB" -> ReaderInput.WebUrl(uri)
+                "TXT" -> ReaderInput.TxtDocument(uri, persisted)
+                "EPUB" -> ReaderInput.EpubDocument(uri, persisted)
+                else -> return
+            },
+        )
+    }
+
+    private fun openRecent(session: ReaderSessionEntity) {
+        val uri = android.net.Uri.parse(session.uri)
+        onReaderInput(
+            when (session.type) {
+                "EPUB" -> ReaderInput.EpubDocument(uri, true)
+                "TXT" -> ReaderInput.TxtDocument(uri, true)
+                else -> ReaderInput.WebUrl(uri)
+            },
+        )
     }
 
     private fun openTxt(input: ReaderInput.TxtDocument) {
@@ -137,7 +247,14 @@ class MainActivity : ComponentActivity() {
             source.open()
                 .onSuccess { result ->
                     when (result) {
-                        is TxtOpenResult.Ready -> txtDocument = result.document
+                        is TxtOpenResult.Ready -> {
+                            txtDocument = result.document
+                            persistBasicSession(
+                                sourceId = input.uri.toString(),
+                                type = "TXT",
+                                title = input.uri.lastPathSegment ?: "TXT 文档",
+                            )
+                        }
                         is TxtOpenResult.NeedsEncodingSelection -> {
                             readerInput = null
                             val names = result.candidates.joinToString { it.charsetName }
@@ -210,11 +327,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun persistBasicSession(sourceId: String, type: String, title: String) {
+        lifecycleScope.launch {
+            readerSessionDao.upsert(
+                ReaderSessionEntity(
+                    sourceId = sourceId,
+                    type = type,
+                    title = title.ifBlank { sourceId },
+                    uri = sourceId,
+                    chapterId = null,
+                    scrollRatio = 0.0,
+                    lastOpenedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
     private fun closeEpub() {
         val source = epubSource
         readerInput = null
         epubDocument = null
         epubSource = null
         lifecycleScope.launch { source?.close() }
+    }
+
+    private fun ReaderInput.toDestinationState() = ReaderDestinationState(
+        inputType = when (this) {
+            is ReaderInput.WebUrl -> "WEB"
+            is ReaderInput.TxtDocument -> "TXT"
+            is ReaderInput.EpubDocument -> "EPUB"
+        },
+        uri = when (this) {
+            is ReaderInput.WebUrl -> uri.toString()
+            is ReaderInput.TxtDocument -> uri.toString()
+            is ReaderInput.EpubDocument -> uri.toString()
+        },
+    )
+
+    companion object {
+        private const val STATE_INPUT_TYPE = "reader.input.type"
+        private const val STATE_INPUT_URI = "reader.input.uri"
+        private const val STATE_PERSISTED_PERMISSION = "reader.input.persisted"
     }
 }

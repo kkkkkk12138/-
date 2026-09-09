@@ -1,7 +1,9 @@
 package com.xiaoshuo.yijianhuanming.reader
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +29,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.xiaoshuo.yijianhuanming.content.web.NavigationDecision
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
@@ -33,6 +39,9 @@ import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
 import com.xiaoshuo.yijianhuanming.content.epub.EpubChapter
 import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
 import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
+import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
+import com.xiaoshuo.yijianhuanming.navigation.ReaderBackTarget
+import com.xiaoshuo.yijianhuanming.navigation.readerBackTarget
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,9 +53,12 @@ fun ReaderScreen(
     txtPathHandler: TxtAssetPathHandler? = null,
     epubDocument: EpubReaderDocument? = null,
     onEpubLocationChanged: (EpubLocation) -> Unit = {},
+    onClearHistory: () -> Unit = {},
+    onClearEpubCache: () -> Unit = {},
     viewModel: ReaderViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsState()
     val scope = rememberCoroutineScope()
     var showRules by remember { mutableStateOf(false) }
@@ -60,6 +72,7 @@ fun ReaderScreen(
         mutableStateOf(epubDocument?.initialUrl ?: url)
     }
     var needsInitialRestore by remember(epubDocument) { mutableStateOf(epubDocument != null) }
+    var fontScale by remember { mutableStateOf(1f) }
     val currentChapter = epubDocument?.chapter(currentChapterId)
     fun saveEpubLocation(afterSave: () -> Unit = {}) {
         val chapterId = currentChapterId
@@ -96,11 +109,58 @@ fun ReaderScreen(
             }
         }
     }
-
-    BackHandler {
-        saveEpubLocation(onClose)
+    DisposableEffect(lifecycleOwner, epubDocument, currentChapterId, webView) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) saveEpubLocation()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    MaterialTheme {
+
+    PredictiveBackHandler {
+        it.collect {}
+        when (
+            readerBackTarget(
+                panelOpen = showRules || showContents,
+                canNavigateWebHistory = webView?.canGoBack() == true,
+            )
+        ) {
+            ReaderBackTarget.DismissPanel -> {
+                showRules = false
+                showContents = false
+            }
+            ReaderBackTarget.WebHistory -> webView?.goBack()
+            ReaderBackTarget.CloseReader -> saveEpubLocation(onClose)
+        }
+    }
+    AdaptiveReaderChrome(
+        supportingContent = {
+            ReaderSettingsSheet(
+                fontScale = fontScale,
+                onFontScaleChange = { scale ->
+                    fontScale = scale
+                    webView?.evaluateJavascript(
+                        "document.documentElement.style.fontSize='${(scale * 100).toInt()}%'",
+                        null,
+                    )
+                },
+                onClearWebData = {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    WebStorage.getInstance().deleteAllData()
+                    webView?.clearFormData()
+                    webView?.clearCache(true)
+                    webView?.clearHistory()
+                },
+                onClearRules = {
+                    runtime?.let { current ->
+                        scope.launch { viewModel.clearRules(current) }
+                    }
+                },
+                onClearHistory = onClearHistory,
+                onClearEpubCache = onClearEpubCache,
+            )
+        },
+    ) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column {
                 ReaderToolbar(
@@ -162,6 +222,8 @@ fun ReaderScreen(
                 )
             }
         }
+    }
+    MaterialTheme {
         if (showRules) {
             ModalBottomSheet(onDismissRequest = { showRules = false }) {
                 RuleEditorSheet(
