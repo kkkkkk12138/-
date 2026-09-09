@@ -1,110 +1,134 @@
 # 小说一键换名
 
-Safari 首发的阅读换名扩展。目标是在当前阅读网页里无感替换角色名字，并尽量保持原网页的字体、字号、颜色与排版不变。
+在阅读小说网页、TXT 或 EPUB 时，把角色原名替换成你熟悉的新名字。换名在设备本地完成，不需要注册账号，也不会上传阅读内容和规则。
 
-普通用户通过 App Store 安装正式产品；GitHub 仓库仅用于开发、构建与发布。
+## Android 下载
 
-## 项目结构
+当前公开版本是 Android `0.1.0 Debug Beta`，用于功能内测。
 
-- `apple/小说一键换名/`：iOS 与 macOS Safari Extension 的 Xcode 工程
+### 直接安装
+
+[下载 Android APK](https://github.com/kkkkkk12138/xiaoshuo-yijian-huanming/releases/download/v0.1.0-android-beta/xiaoshuo-yijian-huanming-android-0.1.0-debug.apk)
+
+适合只想安装使用的用户。Android 会提示是否允许浏览器或文件管理器“安装未知应用”，安装完成后可以关闭这项授权。
+
+### 下载完整压缩包
+
+[下载 ZIP 完整包](https://github.com/kkkkkk12138/xiaoshuo-yijian-huanming/releases/download/v0.1.0-android-beta/xiaoshuo-yijian-huanming-android-0.1.0-debug-beta.zip)
+
+ZIP 内包含 APK、SHA-256 校验文件和中文安装说明。需要核对文件完整性时选择这个版本。
+
+也可以进入 [Android Beta 发布页](https://github.com/kkkkkk12138/xiaoshuo-yijian-huanming/releases/tag/v0.1.0-android-beta) 查看版本说明和全部文件。
+
+> 当前 APK 使用 Android Debug 证书签名，仅适合内测。正式版改用长期 Release 证书后，可能无法直接覆盖安装此测试版；请不要在测试版中保存无法重新创建的重要数据。
+
+## Android 使用方法
+
+### 阅读网页
+
+1. 在夸克、微信或其他 App 中打开无需登录即可阅读的小说网页。
+2. 点击网页的“分享”。
+3. 在分享面板中选择“小说一键换名”。
+4. 进入阅读页后打开“规则”，填写原名和新名。
+5. 点击“全部生效”。
+
+如果分享面板没有显示本应用，点击“更多”查找；仍未出现时，先从桌面打开一次“小说一键换名”，再重新分享。
+
+### 阅读 TXT 或 EPUB
+
+1. 从桌面打开“小说一键换名”。
+2. 点击“打开 TXT / EPUB”。
+3. 在系统文件选择器中选择本地文件。
+4. 打开规则面板，添加换名规则并生效。
+
+支持常见编码 TXT 和无 DRM 的可重排 EPUB2/EPUB3。受 DRM 保护、固定版式或损坏的 EPUB 不支持。
+
+## 常见问题
+
+### 为什么网页提示不支持登录
+
+应用不会读取夸克、微信或其他浏览器的 Cookie，也不提供网站登录。需要登录或付费才能访问的正文，请在正规渠道下载 TXT/EPUB 后再从本地打开。
+
+### 安装时提示风险怎么办
+
+GitHub 下载的 APK 不经过应用商店，Android 会显示“未知来源”提示。请确认下载地址属于本仓库 Release，并核对 SHA-256；不要从陌生群聊或重新打包的网站下载安装。
+
+APK SHA-256：
+
+```text
+c579b1810ed413dedf032d352453ab7d02a73b3c97dc2050c3bb8da0ca927cdf
+```
+
+### 名字没有全部替换
+
+Canvas、图片文字、部分 Shadow DOM 或特殊网页组件无法直接修改。动态加载的普通网页正文会继续监听并替换。
+
+### 替换后为什么换行变化
+
+新名字和原名字数不同时，网页会按原有排版规则重新换行，这是正常现象。
+
+## 平台状态
+
+| 平台 | 当前状态 | 安装方式 |
+|---|---|---|
+| Android | 公开 Beta | 从 GitHub Release 下载 APK |
+| iPhone / iPad Safari | 开发测试中 | 当前仅支持 Xcode 真机测试 |
+| Mac Safari | 开发测试中 | 当前仅支持 Xcode 构建 |
+| Chrome / Edge 桌面版 | 兼容验证中 | 暂未提供普通用户安装包 |
+
+iPhone、iPad 和 Mac 正式版需要通过 TestFlight 或 App Store 分发，不能直接安装 Android APK。
+
+## 隐私边界
+
+- 不读取其他浏览器的 Cookie、密码或浏览记录。
+- 不上传网页、TXT、EPUB、换名规则或阅读历史。
+- 不申请通讯录、位置、相册、无障碍或屏幕录制权限。
+- 网页仅支持无需登录即可访问的公开链接。
+- 所有规则和阅读记录保存在当前设备。
+
+完整说明见 [Android 隐私说明](docs/android/PRIVACY.md)。
+
+<details>
+<summary>开发者构建与测试</summary>
+
+### 项目结构
+
+- `android/`：Jetpack Compose Android App
+- `apple/小说一键换名/`：iOS 与 macOS Safari Extension 工程
+- `src/android-runtime/`：Android WebView 使用的换名运行时
 - `build/webextension/`：标准 WebExtension 核心产物
-- `build/safari-upload/`：同步到 Xcode 工程的 Safari 扩展资源
-- `build/chromium-load/`：Chromium 桌面手工加载目录
 
-## 安装依赖
-
-要求：
-
-- Node.js 18+
-- npm 9+
-
-安装命令：
+### WebExtension 与 Safari
 
 ```bash
 npm install
-```
-
-## Safari 开发
-
-首次拉取仓库后：
-
-```bash
-npm install
-npm run apple:sync
-open "apple/小说一键换名/小说一键换名.xcodeproj"
-```
-
-`apple:sync` 会先构建 WebExtension，再将最新资源同步到 Xcode 工程。真机调试或 TestFlight 构建前，开发者还需在 Xcode 的 Signing & Capabilities 中为 App 和 Extension targets 选择自己的 Apple Developer Team。
-
-完整的 Xcode 构建、签名与 Safari 启用步骤见 `docs/safari/XCODE_BUILD_AND_RUN.md`。
-
-## WebExtension 构建
-
-```bash
-npm run build
-```
-
-构建后会刷新三类产物：
-
-- `build/webextension/`
-- `build/safari-upload/`
-- `build/chromium-load/`
-
-## Safari 首发测试
-
-1. 执行 `npm run apple:verify`
-2. 执行 `npm run testflight:preflight`
-3. 在 Xcode 中选择 iOS Simulator 或 macOS scheme 运行
-4. 真机或归档前选择 Apple Developer Team
-5. 通过 Xcode Archive 上传 TestFlight，在 iPhone、iPad、Mac 上测试
-
-补充说明见 `docs/safari/XCODE_BUILD_AND_RUN.md` 和 `docs/safari/APP_STORE_CONNECT_UPLOAD.md`。
-
-## Chromium 桌面兼容测试
-
-1. 执行 `npm run chromium:ready`
-2. 在 Chrome 扩展页选择 `build/chromium-load/`
-
-说明：
-
-- `build/chromium-load/` 是兼容验证路径，不再作为首发主链路
-- 如果只验证 Safari 上架链路，优先关注 `build/safari-upload/`
-
-## 核心使用
-
-1. 打开阅读网页
-2. 打开扩展入口
-3. 输入 `原名 -> 替换成`
-4. 对当前页生效
-
-实现原则：
-
-- 规则默认保存在浏览器本地
-- 当前版本不依赖账号系统
-- 页面替换处理在本地完成
-- Safari 下以“当前网站授权 + 当前页触发”为主心智
-
-## 手工烟测
-
-1. 验证普通正文节点会替换
-2. 验证输入框、按钮、代码块不替换
-3. 修改规则后确认当前页按原文重算
-4. 验证动态新增内容继续替换
-5. 在 Safari 里验证未授权网站时会出现明确提示
-
-## 自动化验证
-
-```bash
 npm test
+npm run build
+npm run apple:sync
 ```
 
-目标：
+Xcode 构建与签名见：
 
-- 全量测试通过
-- Safari 首发元数据、标题与文档口径一致
+- `docs/safari/XCODE_BUILD_AND_RUN.md`
+- `docs/safari/APP_STORE_CONNECT_UPLOAD.md`
 
-## 当前已知边界
+### Android
 
-- 若替换后的名字长度差异较大，网页换行可能发生正常重排
-- Canvas、Shadow DOM、图片文字、部分极端前端框架渲染内容不保证覆盖
-- 如果用户把高频普通词当作规则源文本，仍可能产生误替换
+要求 JDK 17、Android SDK 36、Build Tools 36.0.0：
+
+```bash
+npm install
+npm run build:android-runtime
+./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+Android 构建与正式签名见 `android/README.md`。
+
+</details>
+
+## 已知边界
+
+- 当前 GitHub Android 包是 Debug Beta，不是正式长期签名版本。
+- 公开网页不代表所有网站均可正常加载，网站可能限制 WebView 或外部访问。
+- Canvas、Shadow DOM、图片文字和部分自绘组件不保证覆盖。
+- 将高频普通词设为原名可能产生误替换。

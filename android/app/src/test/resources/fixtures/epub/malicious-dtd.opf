@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!DOCTYPE package [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>&xxe;</dc:title>
+  </metadata>
+  <manifest/>
+  <spine/>
+</package>

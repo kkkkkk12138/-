@@ -1,0 +1,18 @@
+{
+  "original": "沈清辞和沈清",
+  "rules": [
+    {
+      "id": "short",
+      "source": "沈清",
+      "target": "A",
+      "order": 0
+    },
+    {
+      "id": "long",
+      "source": "沈清辞",
+      "target": "B",
+      "order": 1
+    }
+  ],
+  "replaced": "B和A"
+}

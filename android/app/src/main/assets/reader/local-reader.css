@@ -1,0 +1,30 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+body {
+  margin: 0;
+}
+
+#reader {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 46rem;
+  min-height: 100vh;
+  padding: 1.5rem clamp(1rem, 5vw, 2.5rem) 40vh;
+}
+
+.chunk {
+  font-size: 1.125rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+#status {
+  padding: 1rem;
+  text-align: center;
+}
