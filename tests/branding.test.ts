@@ -1,6 +1,6 @@
 import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { prepareManualLoadBundle } from '../scripts/prepare-manual-load.mjs';
 
@@ -55,10 +55,7 @@ afterEach(async () => {
 describe('branding assets', () => {
   it('keeps safari-first metadata and icon declarations in manifest', async () => {
     const manifest = JSON.parse(
-      await readFile(
-        '/Users/bytedance/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/work-mode-projects/6a91125fbe4e7e0d12c55c2e/manifest.json',
-        'utf8'
-      )
+      await readFile(resolve('manifest.json'), 'utf8')
     );
 
     expect(manifest.name).toBe('小说一键换名');
@@ -87,10 +84,7 @@ describe('branding assets', () => {
   });
 
   it('uses the concise product name as the popup document title', async () => {
-    const popupHtml = await readFile(
-      '/Users/bytedance/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/work-mode-projects/6a91125fbe4e7e0d12c55c2e/popup.html',
-      'utf8'
-    );
+    const popupHtml = await readFile(resolve('popup.html'), 'utf8');
 
     expect(popupHtml).toContain('<title>小说一键换名</title>');
   });
