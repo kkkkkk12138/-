@@ -2,7 +2,7 @@ package com.xiaoshuo.yijianhuanming.content.epub
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.nio.file.Path
+import java.nio.file.Paths
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.safety.Cleaner
@@ -52,17 +52,17 @@ class EpubHtmlSanitizer {
         }
         val pathWithoutSuffix = source.substringBefore('#').substringBefore('?')
         return runCatching {
-            val parent = Path.of(chapterPath.replace('\\', '/')).parent ?: Path.of("")
+            val parent = Paths.get(chapterPath.replace('\\', '/')).parent ?: Paths.get("")
             normalizeArchivePath(parent.resolve(pathWithoutSuffix).normalize().toString())
         }.getOrNull()?.takeUnless { it == ".." || it.startsWith("../") }
     }
 
     private fun normalizeArchivePath(path: String): String =
-        Path.of(path.replace('\\', '/')).normalize().toString().replace('\\', '/')
+        Paths.get(path.replace('\\', '/')).normalize().toString().replace('\\', '/')
 
     private fun appAssetsUrl(sessionId: String, path: String): String {
         val encodedPath = path.split('/').joinToString("/") {
-            URLEncoder.encode(it, StandardCharsets.UTF_8).replace("+", "%20")
+            URLEncoder.encode(it, StandardCharsets.UTF_8.name()).replace("+", "%20")
         }
         return "https://appassets.androidplatform.net/epub/$sessionId/$encodedPath"
     }

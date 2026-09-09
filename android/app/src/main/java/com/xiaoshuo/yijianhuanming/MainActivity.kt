@@ -15,18 +15,28 @@ import com.xiaoshuo.yijianhuanming.intake.ReaderInput
 import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
 import com.xiaoshuo.yijianhuanming.content.txt.TxtOpenResult
 import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
+import com.xiaoshuo.yijianhuanming.content.epub.EpubContentSource
+import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
+import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
+import com.xiaoshuo.yijianhuanming.data.ReaderSessionDao
+import com.xiaoshuo.yijianhuanming.data.ReaderSessionEntity
 import com.xiaoshuo.yijianhuanming.reader.HomeScreen
 import com.xiaoshuo.yijianhuanming.reader.ReaderScreen
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var readerSessionDao: ReaderSessionDao
+
     private val inputResolver by lazy { AndroidInputResolver(this) }
     private var readerInput by mutableStateOf<ReaderInput?>(null)
     private var txtDocument by mutableStateOf<TxtReaderDocument?>(null)
+    private var epubDocument by mutableStateOf<EpubReaderDocument?>(null)
     private var txtSource: TxtContentSource? = null
+    private var epubSource: EpubContentSource? = null
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             resolveInput(
@@ -52,6 +62,20 @@ class MainActivity : ComponentActivity() {
                         profile = WebViewProfile.LOCAL_READER,
                         txtPathHandler = document.pathHandler,
                         onClose = ::closeTxt,
+                    )
+                } ?: HomeScreen(
+                    onOpenUrl = {},
+                    onOpenDocument = {},
+                )
+                is ReaderInput.EpubDocument -> epubDocument?.let { document ->
+                    ReaderScreen(
+                        url = document.initialUrl,
+                        profile = WebViewProfile.LOCAL_READER,
+                        epubDocument = document,
+                        onEpubLocationChanged = { location ->
+                            persistEpubLocation(input, document, location)
+                        },
+                        onClose = ::closeEpub,
                     )
                 } ?: HomeScreen(
                     onOpenUrl = {},
@@ -100,8 +124,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is ReaderInput.TxtDocument -> openTxt(input)
-            is ReaderInput.EpubDocument ->
-                Toast.makeText(this, "已识别 EPUB 文件", Toast.LENGTH_SHORT).show()
+            is ReaderInput.EpubDocument -> openEpub(input)
         }
     }
 
@@ -142,6 +165,56 @@ class MainActivity : ComponentActivity() {
         readerInput = null
         txtDocument = null
         txtSource = null
+        lifecycleScope.launch { source?.close() }
+    }
+
+    private fun openEpub(input: ReaderInput.EpubDocument) {
+        readerInput = input
+        epubDocument = null
+        lifecycleScope.launch {
+            val saved = readerSessionDao.findBySourceId(input.uri.toString())
+            val savedLocation = saved?.chapterId?.let { EpubLocation(it, saved.scrollRatio) }
+            val source = EpubContentSource(this@MainActivity, input.uri, savedLocation)
+            epubSource = source
+            source.open()
+                .onSuccess { epubDocument = it }
+                .onFailure {
+                    readerInput = null
+                    epubSource = null
+                    Toast.makeText(
+                        this@MainActivity,
+                        it.message ?: "无法打开 EPUB",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+        }
+    }
+
+    private fun persistEpubLocation(
+        input: ReaderInput.EpubDocument,
+        document: EpubReaderDocument,
+        location: EpubLocation,
+    ) {
+        lifecycleScope.launch {
+            readerSessionDao.upsert(
+                ReaderSessionEntity(
+                    sourceId = input.uri.toString(),
+                    type = "EPUB",
+                    title = document.title,
+                    uri = input.uri.toString(),
+                    chapterId = location.chapterId,
+                    scrollRatio = location.scrollRatio,
+                    lastOpenedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
+    private fun closeEpub() {
+        val source = epubSource
+        readerInput = null
+        epubDocument = null
+        epubSource = null
         lifecycleScope.launch { source?.close() }
     }
 }

@@ -14,6 +14,7 @@ import com.xiaoshuo.yijianhuanming.content.web.SecureWebViewClient
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
 import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
+import com.xiaoshuo.yijianhuanming.content.epub.EpubAssetPathHandler
 
 class ReaderWebView(
     context: Context,
@@ -21,15 +22,19 @@ class ReaderWebView(
     private val securityCallbacks: WebSecurityCallbacks = NoOpWebSecurityCallbacks,
     confirmedCleartextUrl: String? = null,
     txtPathHandler: TxtAssetPathHandler? = null,
+    epubPathHandler: EpubAssetPathHandler? = null,
     onRuntimeReady: (RuleRuntime) -> Unit = {},
 ) : WebView(context) {
     private val navigationPolicy = NavigationPolicy(profile)
     private val runtimeController = WebRuntimeController(this)
     private val assetLoader = if (profile == WebViewProfile.LOCAL_READER) {
         WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
             .apply {
-                if (txtPathHandler != null) addPathHandler("/txt/", txtPathHandler)
+                if (txtPathHandler != null) {
+                    addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                    addPathHandler("/txt/", txtPathHandler)
+                }
+                if (epubPathHandler != null) addPathHandler("/epub/", epubPathHandler)
             }
             .build()
     } else {

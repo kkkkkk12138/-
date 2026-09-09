@@ -93,7 +93,9 @@ val buildAndroidRuntime by tasks.registering(Exec::class) {
 }
 
 tasks.matching {
-    it.name == "mergeDebugAssets" || it.name == "mergeReleaseAssets"
+    it.name == "mergeDebugAssets" ||
+        it.name == "mergeReleaseAssets" ||
+        it.name.contains("lint", ignoreCase = true)
 }.configureEach {
     dependsOn(buildAndroidRuntime)
 }
