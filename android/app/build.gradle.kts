@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.hilt.android)
     implementation(libs.icu4j)
+    implementation(libs.jsoup)
     ksp(libs.androidx.room.compiler)
     ksp(libs.hilt.compiler)
 

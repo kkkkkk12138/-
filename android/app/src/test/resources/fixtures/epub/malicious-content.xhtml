@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <style>@import url(https://evil.test/a.css); body { background: url(https://evil.test/x); }</style>
+  <link rel="stylesheet" href="https://evil.test/book.css">
+</head>
+<body onload="steal()">
+  <h1 style="background:url(https://evil.test/x)" onclick="steal()">标题</h1>
+  <script>alert(1)</script>
+  <iframe src="https://evil.test/frame"></iframe>
+  <object data="https://evil.test/a"></object>
+  <embed src="https://evil.test/a">
+  <form action="https://evil.test/post"><input name="secret"></form>
+  <img id="local" src="../images/cover.jpg" onerror="steal()">
+  <img id="remote" src="https://evil.test/pixel.png">
+  <svg><script>alert(2)</script><circle onload="steal()"/></svg>
+  <p><a href="javascript:steal()">正文</a></p>
+</body>
+</html>
