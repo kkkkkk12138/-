@@ -12,6 +12,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.xiaoshuo.yijianhuanming.intake.AndroidInputResolver
 import com.xiaoshuo.yijianhuanming.intake.ReaderInput
+import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
+import com.xiaoshuo.yijianhuanming.content.txt.TxtOpenResult
+import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
+import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
 import com.xiaoshuo.yijianhuanming.reader.HomeScreen
 import com.xiaoshuo.yijianhuanming.reader.ReaderScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -21,6 +25,8 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val inputResolver by lazy { AndroidInputResolver(this) }
     private var readerInput by mutableStateOf<ReaderInput?>(null)
+    private var txtDocument by mutableStateOf<TxtReaderDocument?>(null)
+    private var txtSource: TxtContentSource? = null
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             resolveInput(
@@ -39,6 +45,17 @@ class MainActivity : ComponentActivity() {
                 is ReaderInput.WebUrl -> ReaderScreen(
                     url = input.uri.toString(),
                     onClose = { readerInput = null },
+                )
+                is ReaderInput.TxtDocument -> txtDocument?.let { document ->
+                    ReaderScreen(
+                        url = document.readerUrl,
+                        profile = WebViewProfile.LOCAL_READER,
+                        txtPathHandler = document.pathHandler,
+                        onClose = ::closeTxt,
+                    )
+                } ?: HomeScreen(
+                    onOpenUrl = {},
+                    onOpenDocument = {},
                 )
                 else -> HomeScreen(
                     onOpenUrl = {},
@@ -82,10 +99,49 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "HTTP 页面需要明确确认", Toast.LENGTH_LONG).show()
                 }
             }
-            is ReaderInput.TxtDocument ->
-                Toast.makeText(this, "已识别 TXT 文件", Toast.LENGTH_SHORT).show()
+            is ReaderInput.TxtDocument -> openTxt(input)
             is ReaderInput.EpubDocument ->
                 Toast.makeText(this, "已识别 EPUB 文件", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun openTxt(input: ReaderInput.TxtDocument) {
+        readerInput = input
+        txtDocument = null
+        val source = TxtContentSource(this, input.uri)
+        txtSource = source
+        lifecycleScope.launch {
+            source.open()
+                .onSuccess { result ->
+                    when (result) {
+                        is TxtOpenResult.Ready -> txtDocument = result.document
+                        is TxtOpenResult.NeedsEncodingSelection -> {
+                            readerInput = null
+                            val names = result.candidates.joinToString { it.charsetName }
+                            Toast.makeText(
+                                this@MainActivity,
+                                "无法确定 TXT 编码，请选择编码：$names",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                }
+                .onFailure {
+                    readerInput = null
+                    Toast.makeText(
+                        this@MainActivity,
+                        it.message ?: "无法打开 TXT",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+        }
+    }
+
+    private fun closeTxt() {
+        val source = txtSource
+        readerInput = null
+        txtDocument = null
+        txtSource = null
+        lifecycleScope.launch { source?.close() }
     }
 }

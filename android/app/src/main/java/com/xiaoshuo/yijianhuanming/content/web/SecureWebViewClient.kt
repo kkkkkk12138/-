@@ -6,8 +6,10 @@ import android.webkit.ClientCertRequest
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebViewAssetLoader
 import com.xiaoshuo.yijianhuanming.reader.WebRuntimeController
 import com.xiaoshuo.yijianhuanming.reader.RuleRuntime
 
@@ -28,6 +30,7 @@ class SecureWebViewClient(
     private val callbacks: WebSecurityCallbacks = NoOpWebSecurityCallbacks,
     private val confirmedCleartextUrl: String? = null,
     private val onRuntimeReady: (RuleRuntime) -> Unit = {},
+    private val assetLoader: WebViewAssetLoader? = null,
 ) : WebViewClient() {
     private var pageGeneration: Long = 0
     private var activeUrl: String? = null
@@ -37,6 +40,12 @@ class SecureWebViewClient(
 
     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
         blockUnlessAllowed(view, url)
+
+    override fun shouldInterceptRequest(
+        view: WebView,
+        request: WebResourceRequest,
+    ): WebResourceResponse? = assetLoader?.shouldInterceptRequest(request.url)
+        ?: super.shouldInterceptRequest(view, request)
 
     override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
         pageGeneration = runtimeController.beginNavigation()

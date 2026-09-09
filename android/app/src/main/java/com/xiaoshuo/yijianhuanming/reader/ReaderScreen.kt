@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xiaoshuo.yijianhuanming.content.web.NavigationDecision
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
+import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,8 @@ import kotlinx.coroutines.launch
 fun ReaderScreen(
     url: String,
     onClose: () -> Unit,
+    profile: WebViewProfile = WebViewProfile.REMOTE_PUBLIC_WEB,
+    txtPathHandler: TxtAssetPathHandler? = null,
     viewModel: ReaderViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -68,8 +71,9 @@ fun ReaderScreen(
                     factory = { androidContext ->
                         ReaderWebView(
                             context = androidContext,
-                            profile = WebViewProfile.REMOTE_PUBLIC_WEB,
+                            profile = profile,
                             securityCallbacks = callbacks,
+                            txtPathHandler = txtPathHandler,
                             onRuntimeReady = { installedRuntime ->
                                 runtime = installedRuntime
                                 scope.launch {

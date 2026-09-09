@@ -5,6 +5,7 @@ import android.os.Message
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import androidx.webkit.WebViewAssetLoader
 import com.xiaoshuo.yijianhuanming.content.web.NavigationDecision
 import com.xiaoshuo.yijianhuanming.content.web.NavigationPolicy
 import com.xiaoshuo.yijianhuanming.content.web.NavigationRequestKind
@@ -12,16 +13,28 @@ import com.xiaoshuo.yijianhuanming.content.web.NoOpWebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.SecureWebViewClient
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
+import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
 
 class ReaderWebView(
     context: Context,
     val profile: WebViewProfile,
     private val securityCallbacks: WebSecurityCallbacks = NoOpWebSecurityCallbacks,
     confirmedCleartextUrl: String? = null,
+    txtPathHandler: TxtAssetPathHandler? = null,
     onRuntimeReady: (RuleRuntime) -> Unit = {},
 ) : WebView(context) {
     private val navigationPolicy = NavigationPolicy(profile)
     private val runtimeController = WebRuntimeController(this)
+    private val assetLoader = if (profile == WebViewProfile.LOCAL_READER) {
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .apply {
+                if (txtPathHandler != null) addPathHandler("/txt/", txtPathHandler)
+            }
+            .build()
+    } else {
+        null
+    }
 
     init {
         profile.applyTo(this)
@@ -32,6 +45,7 @@ class ReaderWebView(
             callbacks = securityCallbacks,
             confirmedCleartextUrl = confirmedCleartextUrl,
             onRuntimeReady = onRuntimeReady,
+            assetLoader = assetLoader,
         )
         webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(
