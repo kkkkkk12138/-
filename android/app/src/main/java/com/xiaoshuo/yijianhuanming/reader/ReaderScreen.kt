@@ -5,11 +5,13 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +28,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -265,7 +269,7 @@ fun ReaderScreen(
 }
 
 @Composable
-private fun ReaderToolbar(
+internal fun ReaderToolbar(
     ruleCount: Int,
     onRules: () -> Unit,
     onClose: () -> Unit,
@@ -276,18 +280,92 @@ private fun ReaderToolbar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        Button(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text("关闭") }
-        if (hasPrevious) Button(onClick = onPrevious) { Text("上一章") }
-        if (showContents) Button(onClick = onContents) { Text("目录") }
-        if (hasNext) Button(onClick = onNext) { Text("下一章") }
-        Button(onClick = onRules, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("规则 $ruleCount")
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val rows = readerToolbarRows(
+            widthDp = maxWidth.value.toInt(),
+            fontScale = density.fontScale,
+            hasPrevious = hasPrevious,
+            showContents = showContents,
+            hasNext = hasNext,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            rows.forEach { actions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    actions.forEach { action ->
+                        Button(
+                            onClick = when (action) {
+                                ReaderToolbarAction.Close -> onClose
+                                ReaderToolbarAction.Previous -> onPrevious
+                                ReaderToolbarAction.Contents -> onContents
+                                ReaderToolbarAction.Next -> onNext
+                                ReaderToolbarAction.Rules -> onRules
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                        ) {
+                            Text(
+                                text = when (action) {
+                                    ReaderToolbarAction.Close -> "关闭"
+                                    ReaderToolbarAction.Previous -> "上一章"
+                                    ReaderToolbarAction.Contents -> "目录"
+                                    ReaderToolbarAction.Next -> "下一章"
+                                    ReaderToolbarAction.Rules -> "规则 $ruleCount"
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+internal enum class ReaderToolbarAction {
+    Close,
+    Previous,
+    Contents,
+    Next,
+    Rules,
+}
+
+internal fun readerToolbarRows(
+    widthDp: Int,
+    fontScale: Float,
+    hasPrevious: Boolean,
+    showContents: Boolean,
+    hasNext: Boolean,
+): List<List<ReaderToolbarAction>> {
+    val actions = buildList {
+        add(ReaderToolbarAction.Close)
+        if (hasPrevious) add(ReaderToolbarAction.Previous)
+        if (showContents) add(ReaderToolbarAction.Contents)
+        if (hasNext) add(ReaderToolbarAction.Next)
+        add(ReaderToolbarAction.Rules)
+    }
+    val needsWrap = actions.size > 3 && widthDp < 480 * fontScale
+    if (!needsWrap) return listOf(actions)
+
+    val navigation = actions.filter {
+        it == ReaderToolbarAction.Close ||
+            it == ReaderToolbarAction.Previous ||
+            it == ReaderToolbarAction.Next
+    }
+    val tools = actions.filter {
+        it == ReaderToolbarAction.Contents || it == ReaderToolbarAction.Rules
+    }
+    return listOf(navigation, tools).filter(List<ReaderToolbarAction>::isNotEmpty)
 }
 
 private fun NavigationDecision.message(): String = when (this) {

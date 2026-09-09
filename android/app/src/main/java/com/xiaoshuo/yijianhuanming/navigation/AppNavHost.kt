@@ -6,9 +6,13 @@ import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -161,12 +165,25 @@ private fun AdaptiveReaderChromeContent(
             ) { supportingContent() }
         }
     } else {
-        Box(Modifier.fillMaxSize()) {
-            mainContent()
-            IconButton(
-                onClick = { showSheet = true },
-                modifier = Modifier.semantics { contentDescription = "打开阅读设置" },
-            ) { Text("设置") }
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                IconButton(
+                    onClick = { showSheet = true },
+                    modifier = Modifier.semantics { contentDescription = "打开阅读设置" },
+                ) { Text("设置") }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                mainContent()
+            }
         }
         if (showSheet) {
             ModalBottomSheet(
