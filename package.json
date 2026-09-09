@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npm run build:safari-first",
     "build:safari-first": "node scripts/build.mjs",
+    "build:android-runtime": "node scripts/build-android-runtime.mjs",
     "prepare:chromium-load": "node scripts/prepare-manual-load.mjs",
     "chromium:open": "open -a \"Google Chrome\" \"chrome://extensions/\"",
     "chromium:ready": "npm run build:safari-first && npm run chromium:open",

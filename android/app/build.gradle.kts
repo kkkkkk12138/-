@@ -31,6 +31,10 @@ android {
         compose = true
     }
 
+    sourceSets["main"].assets.directories.add(
+        layout.buildDirectory.dir("generated/assets/webRuntime").get().asFile.absolutePath,
+    )
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -60,4 +64,24 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+val repositoryRoot = rootProject.projectDir.parentFile
+val generatedRuntime = layout.buildDirectory.file(
+    "generated/assets/webRuntime/name-replacer.js",
+)
+
+val buildAndroidRuntime by tasks.registering(Exec::class) {
+    workingDir(repositoryRoot)
+    commandLine("npm", "run", "build:android-runtime")
+    inputs.dir(repositoryRoot.resolve("src/android-runtime"))
+    inputs.file(repositoryRoot.resolve("src/content/textEngine.ts"))
+    inputs.file(repositoryRoot.resolve("src/content/domFilter.ts"))
+    outputs.file(generatedRuntime)
+}
+
+tasks.matching {
+    it.name == "mergeDebugAssets" || it.name == "mergeReleaseAssets"
+}.configureEach {
+    dependsOn(buildAndroidRuntime)
 }
