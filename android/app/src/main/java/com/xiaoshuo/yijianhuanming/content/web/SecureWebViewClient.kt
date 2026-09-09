@@ -9,6 +9,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.xiaoshuo.yijianhuanming.reader.WebRuntimeController
+import com.xiaoshuo.yijianhuanming.reader.RuleRuntime
 
 interface WebSecurityCallbacks {
     fun onNavigationBlocked(decision: NavigationDecision, url: String)
@@ -26,6 +27,7 @@ class SecureWebViewClient(
     private val runtimeController: WebRuntimeController,
     private val callbacks: WebSecurityCallbacks = NoOpWebSecurityCallbacks,
     private val confirmedCleartextUrl: String? = null,
+    private val onRuntimeReady: (RuleRuntime) -> Unit = {},
 ) : WebViewClient() {
     private var pageGeneration: Long = 0
     private var activeUrl: String? = null
@@ -45,9 +47,13 @@ class SecureWebViewClient(
     override fun onPageFinished(view: WebView, url: String?) {
         if (url != activeUrl) return
         val finishedGeneration = pageGeneration
-        runtimeController.installRuntime(finishedGeneration)
-        runtimeController.inspectLoginRisk(finishedGeneration) { hasLoginRisk ->
-            if (hasLoginRisk) callbacks.onLoginRiskDetected()
+        runtimeController.installRuntime(finishedGeneration) { installed ->
+            if (installed) {
+                onRuntimeReady(runtimeController)
+                runtimeController.inspectLoginRisk(finishedGeneration) { hasLoginRisk ->
+                    if (hasLoginRisk) callbacks.onLoginRiskDetected()
+                }
+            }
         }
         super.onPageFinished(view, url)
     }

@@ -18,6 +18,7 @@ class ReaderWebView(
     val profile: WebViewProfile,
     private val securityCallbacks: WebSecurityCallbacks = NoOpWebSecurityCallbacks,
     confirmedCleartextUrl: String? = null,
+    onRuntimeReady: (RuleRuntime) -> Unit = {},
 ) : WebView(context) {
     private val navigationPolicy = NavigationPolicy(profile)
     private val runtimeController = WebRuntimeController(this)
@@ -30,6 +31,7 @@ class ReaderWebView(
             runtimeController = runtimeController,
             callbacks = securityCallbacks,
             confirmedCleartextUrl = confirmedCleartextUrl,
+            onRuntimeReady = onRuntimeReady,
         )
         webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(
