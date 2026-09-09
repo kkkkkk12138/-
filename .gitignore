@@ -21,3 +21,5 @@ android/.kotlin/
 android/local.properties
 android/settings-gradle.lockfile
 android/**/build/
+*.jks
+*.keystore

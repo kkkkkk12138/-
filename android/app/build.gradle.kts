@@ -5,6 +5,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val releaseSigningVariables = mapOf(
+    "ANDROID_KEYSTORE_PATH" to System.getenv("ANDROID_KEYSTORE_PATH"),
+    "ANDROID_KEYSTORE_PASSWORD" to System.getenv("ANDROID_KEYSTORE_PASSWORD"),
+    "ANDROID_KEY_ALIAS" to System.getenv("ANDROID_KEY_ALIAS"),
+    "ANDROID_KEY_PASSWORD" to System.getenv("ANDROID_KEY_PASSWORD"),
+)
+val missingReleaseSigningVariables = releaseSigningVariables
+    .filterValues { it.isNullOrBlank() }
+    .keys
+
 android {
     namespace = "com.xiaoshuo.yijianhuanming"
     compileSdk = 36
@@ -19,8 +29,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            if (missingReleaseSigningVariables.isEmpty()) {
+                storeFile = file(releaseSigningVariables.getValue("ANDROID_KEYSTORE_PATH")!!)
+                storePassword = releaseSigningVariables.getValue("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningVariables.getValue("ANDROID_KEY_ALIAS")
+                keyPassword = releaseSigningVariables.getValue("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -30,6 +52,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 
@@ -98,4 +121,20 @@ tasks.matching {
         it.name.contains("lint", ignoreCase = true)
 }.configureEach {
     dependsOn(buildAndroidRuntime)
+}
+
+tasks.configureEach {
+    if (
+        name == "preReleaseBuild" ||
+        name.matches(Regex("(assemble|bundle).*Release"))
+    ) {
+        doFirst {
+            if (missingReleaseSigningVariables.isNotEmpty()) {
+                throw GradleException(
+                    "Release signing is required. Missing environment variables: " +
+                        missingReleaseSigningVariables.joinToString(", "),
+                )
+            }
+        }
+    }
 }

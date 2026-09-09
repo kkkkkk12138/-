@@ -17,6 +17,7 @@
     "apple:verify": "npm test && npm run apple:sync && npm run apple:build:ios && npm run apple:build:macos",
     "android:test": "./android/gradlew -p android :app:testDebugUnitTest",
     "android:assemble:debug": "./android/gradlew -p android :app:assembleDebug",
+    "android:release:verify": "node scripts/verify-android-release.mjs",
     "testflight:preflight": "node scripts/testflight-preflight.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
