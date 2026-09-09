@@ -16,3 +16,8 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 *.mobileprovision
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/settings-gradle.lockfile
+android/**/build/
