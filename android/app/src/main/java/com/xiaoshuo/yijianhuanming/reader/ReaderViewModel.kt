@@ -130,7 +130,11 @@ class ReaderViewModel internal constructor(
 
     suspend fun reapplyPersisted(runtime: RuleRuntime): Result<Unit> {
         val rules = mutableState.value.persisted
-        return if (rules.isEmpty()) runtime.restoreOriginalText() else runtime.applyRules(rules)
+        return if (rules.isEmpty()) {
+            runtime.restoreOriginalText()
+        } else {
+            runtime.applyRules(rules).map {}
+        }
     }
 
     suspend fun clearRules(runtime: RuleRuntime): Result<Unit> {

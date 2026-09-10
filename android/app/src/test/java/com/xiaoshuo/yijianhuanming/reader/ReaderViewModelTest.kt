@@ -86,8 +86,19 @@ private class FakeRuntime(
 ) : RuleRuntime {
     var restoreCalls = 0
 
-    override suspend fun applyRules(rules: List<ReplaceRule>): Result<Unit> =
-        if (applySuccess) Result.success(Unit) else Result.failure(IllegalStateException("js failed"))
+    override suspend fun applyRules(rules: List<ReplaceRule>): Result<RuleApplyResult> =
+        if (applySuccess) {
+            Result.success(
+                RuleApplyResult(
+                    activeRuleCount = rules.size,
+                    changedTextNodeCount = 0,
+                    replacementCount = 0,
+                    perRule = emptyList(),
+                ),
+            )
+        } else {
+            Result.failure(IllegalStateException("js failed"))
+        }
 
     override suspend fun restoreOriginalText(): Result<Unit> {
         restoreCalls += 1

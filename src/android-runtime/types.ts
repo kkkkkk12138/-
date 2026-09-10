@@ -6,7 +6,16 @@ export type OrderedReplaceRule = {
 };
 
 export type ApplyResult =
-  | { ok: true; activeRuleCount: number; changedTextNodeCount: number }
+  | {
+      ok: true;
+      activeRuleCount: number;
+      changedTextNodeCount: number;
+      replacementCount: number;
+      perRule: Array<{
+        ruleId: string;
+        replacementCount: number;
+      }>;
+    }
   | {
       ok: false;
       code: 'NOT_INSTALLED' | 'INVALID_RULES' | 'RUNTIME_ERROR';
@@ -16,6 +25,6 @@ export type ApplyResult =
 export interface NameReplacerRuntime {
   install(): void;
   applyRules(rules: OrderedReplaceRule[]): ApplyResult;
-  restoreOriginalText(): void;
+  restoreOriginalText(): ApplyResult;
   dispose(): void;
 }
