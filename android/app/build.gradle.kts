@@ -93,6 +93,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.icu4j)
     implementation(libs.jsoup)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     ksp(libs.androidx.room.compiler)
     ksp(libs.hilt.compiler)
 

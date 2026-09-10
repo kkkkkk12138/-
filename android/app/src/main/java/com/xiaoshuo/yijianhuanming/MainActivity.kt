@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xiaoshuo.yijianhuanming.intake.AndroidInputResolver
+import com.xiaoshuo.yijianhuanming.intake.DocumentKind
+import com.xiaoshuo.yijianhuanming.intake.DocumentMetadataResolver
 import com.xiaoshuo.yijianhuanming.intake.ReaderInput
 import com.xiaoshuo.yijianhuanming.intake.UrlEntryResolver
 import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
@@ -43,6 +45,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var readerSessionDao: ReaderSessionDao
 
     private val inputResolver by lazy { AndroidInputResolver(this) }
+    private val documentMetadataResolver by lazy { DocumentMetadataResolver(contentResolver) }
     private val urlEntryResolver by lazy { UrlEntryResolver(inputResolver) }
     private var readerInput by mutableStateOf<ReaderInput?>(null)
     private var requestUrlDialog by mutableStateOf(false)
@@ -161,7 +164,7 @@ class MainActivity : ComponentActivity() {
                         profile = WebViewProfile.LOCAL_READER,
                         epubDocument = document,
                         onEpubLocationChanged = { location ->
-                            persistEpubLocation(input, document, location)
+                            persistEpubLocation(input, location)
                         },
                         onClose = ::closeEpub,
                         onClearHistory = onClearHistory,
@@ -217,7 +220,7 @@ class MainActivity : ComponentActivity() {
             is ReaderInput.WebUrl -> {
                 if (input.uri.scheme.equals("https", ignoreCase = true)) {
                     readerInput = input
-                    persistBasicSession(input.uri.toString(), "WEB", input.uri.host.orEmpty())
+                    upsertSessionMetadata(input.uri.toString(), "WEB", input.uri.host.orEmpty())
                 } else {
                     Toast.makeText(this, "HTTP 页面需要明确确认", Toast.LENGTH_LONG).show()
                 }
@@ -229,7 +232,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openUrlFromDialog(input: ReaderInput.WebUrl) {
         readerInput = input
-        persistBasicSession(input.uri.toString(), "WEB", input.uri.host.orEmpty())
+        upsertSessionMetadata(input.uri.toString(), "WEB", input.uri.host.orEmpty())
     }
 
     private fun restoreReaderInput(state: Bundle) {
@@ -268,10 +271,13 @@ class MainActivity : ComponentActivity() {
                     when (result) {
                         is TxtOpenResult.Ready -> {
                             txtDocument = result.document
-                            persistBasicSession(
+                            upsertSessionMetadata(
                                 sourceId = input.uri.toString(),
                                 type = "TXT",
-                                title = input.uri.lastPathSegment ?: "TXT 文档",
+                                title = documentMetadataResolver.resolve(
+                                    DocumentKind.TXT,
+                                    input.uri.toString(),
+                                ),
                             )
                         }
                         is TxtOpenResult.NeedsEncodingSelection -> {
@@ -312,52 +318,56 @@ class MainActivity : ComponentActivity() {
             val savedLocation = saved?.chapterId?.let { EpubLocation(it, saved.scrollRatio) }
             val source = EpubContentSource(this@MainActivity, input.uri, savedLocation)
             epubSource = source
-            source.open()
-                .onSuccess { epubDocument = it }
-                .onFailure {
-                    readerInput = null
-                    epubSource = null
-                    Toast.makeText(
-                        this@MainActivity,
-                        it.message ?: "无法打开 EPUB",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
+            val result = source.open()
+            result.getOrNull()?.let { document ->
+                readerSessionDao.upsertMetadataPreservingProgress(
+                    sourceId = input.uri.toString(),
+                    type = "EPUB",
+                    title = documentMetadataResolver.resolve(
+                        DocumentKind.EPUB,
+                        input.uri.toString(),
+                    ),
+                    uri = input.uri.toString(),
+                    lastOpenedAt = System.currentTimeMillis(),
+                )
+                epubDocument = document
+            }
+            result.exceptionOrNull()?.let {
+                readerInput = null
+                epubSource = null
+                Toast.makeText(
+                    this@MainActivity,
+                    it.message ?: "无法打开 EPUB",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 
     private fun persistEpubLocation(
         input: ReaderInput.EpubDocument,
-        document: EpubReaderDocument,
         location: EpubLocation,
     ) {
         lifecycleScope.launch {
-            readerSessionDao.upsert(
-                ReaderSessionEntity(
-                    sourceId = input.uri.toString(),
-                    type = "EPUB",
-                    title = document.title,
-                    uri = input.uri.toString(),
-                    chapterId = location.chapterId,
-                    scrollRatio = location.scrollRatio,
-                    lastOpenedAt = System.currentTimeMillis(),
-                ),
+            readerSessionDao.saveProgress(
+                sourceId = input.uri.toString(),
+                chapterId = location.chapterId,
+                scrollRatio = location.scrollRatio,
+                textOffset = null,
+                textTotalAtSave = null,
+                lastOpenedAt = System.currentTimeMillis(),
             )
         }
     }
 
-    private fun persistBasicSession(sourceId: String, type: String, title: String) {
+    private fun upsertSessionMetadata(sourceId: String, type: String, title: String) {
         lifecycleScope.launch {
-            readerSessionDao.upsert(
-                ReaderSessionEntity(
-                    sourceId = sourceId,
-                    type = type,
-                    title = title.ifBlank { sourceId },
-                    uri = sourceId,
-                    chapterId = null,
-                    scrollRatio = 0.0,
-                    lastOpenedAt = System.currentTimeMillis(),
-                ),
+            readerSessionDao.upsertMetadataPreservingProgress(
+                sourceId = sourceId,
+                type = type,
+                title = title.ifBlank { sourceId },
+                uri = sourceId,
+                lastOpenedAt = System.currentTimeMillis(),
             )
         }
     }
