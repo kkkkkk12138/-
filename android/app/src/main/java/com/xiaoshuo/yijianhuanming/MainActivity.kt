@@ -22,6 +22,7 @@ import com.xiaoshuo.yijianhuanming.intake.UrlEntryResolver
 import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
 import com.xiaoshuo.yijianhuanming.content.txt.TxtOpenResult
 import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
+import com.xiaoshuo.yijianhuanming.content.txt.TxtResumePosition
 import com.xiaoshuo.yijianhuanming.content.epub.EpubContentSource
 import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
 import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
@@ -32,6 +33,9 @@ import com.xiaoshuo.yijianhuanming.reader.HomeScreen
 import com.xiaoshuo.yijianhuanming.reader.ReaderScreen
 import com.xiaoshuo.yijianhuanming.reader.ReaderSettingsSheet
 import com.xiaoshuo.yijianhuanming.library.LibraryViewModel
+import com.xiaoshuo.yijianhuanming.library.ReadingProgress
+import com.xiaoshuo.yijianhuanming.library.ReadingProgressCoordinator
+import com.xiaoshuo.yijianhuanming.library.txtRatio
 import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.AppNavHost
 import com.xiaoshuo.yijianhuanming.navigation.NameReplacerTheme
@@ -52,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private var txtDocument by mutableStateOf<TxtReaderDocument?>(null)
     private var epubDocument by mutableStateOf<EpubReaderDocument?>(null)
     private var txtSource: TxtContentSource? = null
+    private var txtProgressCoordinator: ReadingProgressCoordinator? = null
     private var epubSource: EpubContentSource? = null
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -149,6 +154,9 @@ class MainActivity : ComponentActivity() {
                         url = document.readerUrl,
                         profile = WebViewProfile.LOCAL_READER,
                         txtPathHandler = document.pathHandler,
+                        txtDocument = document,
+                        txtSourceId = input.uri.toString(),
+                        txtProgressCoordinator = txtProgressCoordinator,
                         onClose = ::closeTxt,
                         onClearHistory = onClearHistory,
                         onClearEpubCache = onClearEpubCache,
@@ -263,13 +271,45 @@ class MainActivity : ComponentActivity() {
     private fun openTxt(input: ReaderInput.TxtDocument) {
         readerInput = input
         txtDocument = null
-        val source = TxtContentSource(this, input.uri)
-        txtSource = source
         lifecycleScope.launch {
+            val saved = readerSessionDao.findBySourceId(input.uri.toString())
+            txtProgressCoordinator = ReadingProgressCoordinator(lifecycleScope) { progress ->
+                readerSessionDao.saveProgress(
+                    sourceId = input.uri.toString(),
+                    chapterId = null,
+                    scrollRatio = progress.scrollRatio,
+                    textOffset = progress.textOffset,
+                    textTotalAtSave = progress.textTotalAtSave,
+                    lastOpenedAt = progress.lastOpenedAt,
+                )
+            }
+            val source = TxtContentSource(
+                context = this@MainActivity,
+                uri = input.uri,
+                resumePosition = saved?.let {
+                    TxtResumePosition(
+                        textOffset = it.textOffset,
+                        textTotalAtSave = it.textTotalAtSave,
+                        scrollRatio = it.scrollRatio,
+                    )
+                },
+            )
+            txtSource = source
             source.open()
                 .onSuccess { result ->
                     when (result) {
                         is TxtOpenResult.Ready -> {
+                            txtProgressCoordinator?.rememberConfirmed(
+                                ReadingProgress(
+                                    textOffset = result.document.initialOffset,
+                                    textTotalAtSave = result.document.totalUtf16Units,
+                                    scrollRatio = txtRatio(
+                                        result.document.initialOffset,
+                                        result.document.totalUtf16Units,
+                                    ),
+                                    lastOpenedAt = System.currentTimeMillis(),
+                                ),
+                            )
                             txtDocument = result.document
                             upsertSessionMetadata(
                                 sourceId = input.uri.toString(),
@@ -307,6 +347,7 @@ class MainActivity : ComponentActivity() {
         readerInput = null
         txtDocument = null
         txtSource = null
+        txtProgressCoordinator = null
         lifecycleScope.launch { source?.close() }
     }
 

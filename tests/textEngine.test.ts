@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { installNameReplacerRuntime } from '../src/android-runtime/runtime';
 import { shouldProcessTextNode } from '../src/content/domFilter';
 import { createTextEngine } from '../src/content/textEngine';
 
@@ -193,5 +194,29 @@ describe('text engine', () => {
     expect(cleared.perRule).toEqual([]);
     expect(engine.sourceOffsetToRendered(textNode, 2)).toBe(2);
     expect(engine.renderedOffsetToSource(textNode, 2)).toBe(2);
+  });
+
+  it('exposes source/rendered UTF-16 mapping through the Android runtime', () => {
+    document.body.innerHTML = '<section data-source-start="20">宝宝A😀</section>';
+    const node = document.querySelector('section')!.firstChild as Text;
+    const runtime = installNameReplacerRuntime(document);
+
+    runtime.applyRules([
+      { id: 'long', source: '宝宝', target: '一位很长的名字', order: 0 },
+      { id: 'emoji', source: '😀', target: 'X', order: 1 }
+    ]);
+
+    expect(runtime.renderedOffsetToSource(node, 7)).toBe(2);
+    expect(runtime.sourceOffsetToRendered(node, 2)).toBe(7);
+    expect(runtime.sourceOffsetToRendered(node, 3)).toBe(8);
+    expect(runtime.sourceOffsetToRendered(node, 4)).toBe(8);
+    expect(runtime.sourceOffsetToRendered(node, 5)).toBe(9);
+
+    runtime.applyRules([{ id: 'short', source: '宝宝', target: '宝', order: 0 }]);
+    expect(runtime.sourceOffsetToRendered(node, 2)).toBe(1);
+
+    runtime.restoreOriginalText();
+    expect(runtime.sourceOffsetToRendered(node, 4)).toBe(4);
+    expect(runtime.renderedOffsetToSource(node, 4)).toBe(4);
   });
 });

@@ -91,6 +91,14 @@ export function installNameReplacerRuntime(doc: Document): NameReplacerRuntime {
       };
     },
 
+    renderedOffsetToSource(node, renderedOffset) {
+      return engine.renderedOffsetToSource(node, renderedOffset);
+    },
+
+    sourceOffsetToRendered(node, sourceOffset) {
+      return engine.sourceOffsetToRendered(node, sourceOffset);
+    },
+
     dispose() {
       runtime.restoreOriginalText();
       installed = false;

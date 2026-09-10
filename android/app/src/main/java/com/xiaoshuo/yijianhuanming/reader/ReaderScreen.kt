@@ -3,6 +3,7 @@ package com.xiaoshuo.yijianhuanming.reader
 import android.widget.Toast
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import android.os.SystemClock
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -45,13 +46,19 @@ import com.xiaoshuo.yijianhuanming.content.web.NavigationDecision
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
 import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
+import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
 import com.xiaoshuo.yijianhuanming.content.epub.EpubChapter
 import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
 import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
 import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.ReaderBackTarget
 import com.xiaoshuo.yijianhuanming.navigation.readerBackTarget
+import com.xiaoshuo.yijianhuanming.library.ReadingProgress
+import com.xiaoshuo.yijianhuanming.library.ReadingProgressCoordinator
+import com.xiaoshuo.yijianhuanming.library.txtRatio
+import kotlin.coroutines.resume
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +67,10 @@ fun ReaderScreen(
     onClose: () -> Unit,
     profile: WebViewProfile = WebViewProfile.REMOTE_PUBLIC_WEB,
     txtPathHandler: TxtAssetPathHandler? = null,
+    txtDocument: TxtReaderDocument? = null,
+    txtSourceId: String? = null,
+    txtProgressCoordinator: ReadingProgressCoordinator? = null,
+    onTxtProgressChanged: suspend (ReadingProgress) -> Unit = {},
     epubDocument: EpubReaderDocument? = null,
     onEpubLocationChanged: (EpubLocation) -> Unit = {},
     onClearHistory: () -> Unit = {},
@@ -85,8 +96,44 @@ fun ReaderScreen(
         mutableStateOf(epubDocument?.initialUrl ?: url)
     }
     var needsInitialRestore by remember(epubDocument) { mutableStateOf(epubDocument != null) }
+    var needsInitialTxtRestore by remember(txtDocument) { mutableStateOf(txtDocument != null) }
     var fontScale by remember { mutableStateOf(1f) }
+    var lastTxtSampleAt by remember(txtDocument) { mutableStateOf(0L) }
+    val fallbackTxtProgressCoordinator = remember(txtDocument?.sessionId, txtSourceId) {
+        ReadingProgressCoordinator(writer = onTxtProgressChanged).also { coordinator ->
+            txtDocument?.let { document ->
+                coordinator.rememberConfirmed(
+                    ReadingProgress(
+                        textOffset = document.initialOffset,
+                        textTotalAtSave = document.totalUtf16Units,
+                        scrollRatio = txtRatio(document.initialOffset, document.totalUtf16Units),
+                        lastOpenedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
+    }
+    val progressCoordinator = txtProgressCoordinator ?: fallbackTxtProgressCoordinator
     val currentChapter = epubDocument?.chapter(currentChapterId)
+    suspend fun captureTxtProgress(): ReadingProgress? {
+        val document = txtDocument ?: return null
+        val offset = webView?.evaluateLong(
+            "window.__TXT_READER__ ? window.__TXT_READER__.characterOffset() : null",
+        ) ?: return null
+        val clamped = offset.coerceIn(0, document.totalUtf16Units)
+        return ReadingProgress(
+            textOffset = clamped,
+            textTotalAtSave = document.totalUtf16Units,
+            scrollRatio = txtRatio(clamped, document.totalUtf16Units),
+            lastOpenedAt = System.currentTimeMillis(),
+        )
+    }
+    fun saveTxtProgress() {
+        if (txtDocument == null) return
+        scope.launch {
+            progressCoordinator.captureAndSave(::captureTxtProgress)
+        }
+    }
     fun saveEpubLocation(afterSave: () -> Unit = {}) {
         val chapterId = currentChapterId
         val activeWebView = webView
@@ -100,6 +147,23 @@ fun ReaderScreen(
             val ratio = raw?.trim('"')?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
             onEpubLocationChanged(EpubLocation(chapterId, ratio.coerceIn(0.0, 1.0)))
             afterSave()
+        }
+    }
+    fun closeReader() {
+        if (txtDocument == null) {
+            saveEpubLocation(onClose)
+            return
+        }
+        scope.launch {
+            progressCoordinator.saveBeforeClose(
+                totalUtf16Units = txtDocument.totalUtf16Units,
+                timeoutMillis = 300,
+            ) {
+                webView?.evaluateLong(
+                    "window.__TXT_READER__ ? window.__TXT_READER__.characterOffset() : null",
+                )
+            }
+            onClose()
         }
     }
     fun openChapter(chapterId: String) {
@@ -128,7 +192,10 @@ fun ReaderScreen(
     }
     DisposableEffect(lifecycleOwner, epubDocument, currentChapterId, webView) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) saveEpubLocation()
+            if (event == Lifecycle.Event.ON_STOP) {
+                saveEpubLocation()
+                saveTxtProgress()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -147,7 +214,7 @@ fun ReaderScreen(
                 showContents = false
             }
             ReaderBackTarget.WebHistory -> webView?.goBack()
-            ReaderBackTarget.CloseReader -> saveEpubLocation(onClose)
+            ReaderBackTarget.CloseReader -> closeReader()
         }
     }
     AdaptiveReaderChrome(
@@ -184,7 +251,7 @@ fun ReaderScreen(
                     ruleCount = state.persisted.size,
                     onRules = { showRules = true },
                     onClose = {
-                        saveEpubLocation(onClose)
+                        closeReader()
                     },
                     showContents = !epubDocument?.tableOfContents.isNullOrEmpty(),
                     onContents = { showContents = true },
@@ -226,6 +293,14 @@ fun ReaderScreen(
                                 scope.launch {
                                     val result = viewModel.reapplyPersisted(installedRuntime)
                                     complete(result.isSuccess)
+                                    if (result.isSuccess && needsInitialTxtRestore) {
+                                        val offset = txtDocument?.initialOffset ?: 0
+                                        webView?.evaluateJavascript(
+                                            "window.__TXT_READER__ && window.__TXT_READER__.restoreCharacterOffset($offset)",
+                                            null,
+                                        )
+                                        needsInitialTxtRestore = false
+                                    }
                                     result.onFailure {
                                         Toast.makeText(context, it.message ?: "规则重新应用失败", Toast.LENGTH_LONG).show()
                                     }
@@ -233,6 +308,15 @@ fun ReaderScreen(
                             },
                         ).also {
                             webView = it
+                            if (txtDocument != null) {
+                                it.setOnScrollChangeListener { _, _, _, _, _ ->
+                                    val now = SystemClock.elapsedRealtime()
+                                    if (now - lastTxtSampleAt >= 2_000) {
+                                        lastTxtSampleAt = now
+                                        saveTxtProgress()
+                                    }
+                                }
+                            }
                             it.loadUrl(currentUrl)
                         }
                     },
@@ -436,3 +520,19 @@ private fun NavigationDecision.message(): String = when (this) {
     NavigationDecision.BlockLogin -> "登录页面已被拦截"
     is NavigationDecision.Block -> reason
 }
+
+private suspend fun ReaderWebView.evaluateLong(script: String): Long? =
+    suspendCancellableCoroutine { continuation ->
+        evaluateJavascript(script) { raw ->
+            if (continuation.isActive) {
+                continuation.resume(
+                    raw
+                        ?.trim('"')
+                        ?.takeUnless { it == "null" || it == "undefined" }
+                        ?.toDoubleOrNull()
+                        ?.takeIf(Double::isFinite)
+                        ?.toLong(),
+                )
+            }
+        }
+    }
