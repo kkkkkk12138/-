@@ -59,12 +59,19 @@ android {
     sourceSets["main"].assets.directories.add(
         layout.buildDirectory.dir("generated/assets/webRuntime").get().asFile.absolutePath,
     )
+    sourceSets["androidTest"].assets.directories.add(
+        file("$projectDir/schemas").absolutePath,
+    )
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencyLocking {

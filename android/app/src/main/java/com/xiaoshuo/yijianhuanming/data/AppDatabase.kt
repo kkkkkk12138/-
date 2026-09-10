@@ -6,7 +6,7 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [RuleEntity::class, ReaderSessionEntity::class],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ruleDao(): RuleDao
