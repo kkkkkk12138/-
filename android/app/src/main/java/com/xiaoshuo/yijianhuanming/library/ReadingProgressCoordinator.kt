@@ -1,5 +1,7 @@
 package com.xiaoshuo.yijianhuanming.library
 
+import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
+import com.xiaoshuo.yijianhuanming.content.epub.normalizeChapterRatio
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -11,6 +13,7 @@ data class ReadingProgress(
     val textTotalAtSave: Long,
     val scrollRatio: Double,
     val lastOpenedAt: Long,
+    val chapterId: String? = null,
 )
 
 fun txtRatio(offset: Long, totalUtf16Units: Long): Double {
@@ -30,6 +33,28 @@ fun restoreTxtOffset(
     }
     val ratio = savedRatio.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     return (ratio * currentTotal).toLong().coerceIn(0, currentTotal)
+}
+
+fun epubProgress(location: EpubLocation, now: Long): ReadingProgress = ReadingProgress(
+    textOffset = 0,
+    textTotalAtSave = 0,
+    scrollRatio = normalizeChapterRatio(location.scrollRatio),
+    lastOpenedAt = now,
+    chapterId = location.chapterId,
+)
+
+suspend fun initializeEpubProgress(
+    location: EpubLocation,
+    repaired: Boolean,
+    coordinator: ReadingProgressCoordinator,
+    now: () -> Long = System::currentTimeMillis,
+) {
+    val progress = epubProgress(location, now())
+    if (repaired) {
+        coordinator.save(progress)
+    } else {
+        coordinator.rememberConfirmed(progress)
+    }
 }
 
 class ReadingProgressCoordinator(
@@ -117,5 +142,40 @@ class ReadingProgressCoordinator(
             save(fallback)
         }
         return fallback
+    }
+
+    suspend fun saveBeforeClose(
+        timeoutMillis: Long = 300,
+        now: () -> Long = System::currentTimeMillis,
+        capture: suspend () -> ReadingProgress?,
+    ): ReadingProgress? {
+        val sequence = beginSequence()
+        val fresh = withTimeoutOrNull(timeoutMillis) {
+            capture()?.copy(lastOpenedAt = now())?.takeIf { save(sequence, it) }
+        }
+        if (fresh != null) return fresh
+
+        val fallback = confirmed?.copy(lastOpenedAt = now()) ?: return null
+        save(fallback)
+        return fallback
+    }
+}
+
+suspend fun saveEpubBeforeChapterChange(
+    oldChapterId: String,
+    newChapterId: String,
+    coordinator: ReadingProgressCoordinator,
+    now: () -> Long = System::currentTimeMillis,
+    captureRatio: suspend () -> Double?,
+    loadChapter: (String) -> Unit,
+) {
+    val sequence = coordinator.beginSequence()
+    val fallbackRatio = coordinator.latestConfirmed()
+        ?.takeIf { it.chapterId == oldChapterId }
+        ?.scrollRatio
+        ?: 0.0
+    val location = EpubLocation(oldChapterId, captureRatio() ?: fallbackRatio)
+    if (coordinator.save(sequence, epubProgress(location, now()))) {
+        loadChapter(newChapterId)
     }
 }

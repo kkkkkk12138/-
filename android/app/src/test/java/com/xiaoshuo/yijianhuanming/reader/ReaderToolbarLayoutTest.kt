@@ -5,6 +5,16 @@ import org.junit.Test
 
 class ReaderToolbarLayoutTest {
     @Test
+    fun epub_ratio_script_uses_document_scroll_extent_and_guards_short_chapters() {
+        assertEquals(
+            """
+            (function(){const d=document.documentElement;const max=Math.max(1,d.scrollHeight-d.clientHeight);const value=d.scrollHeight<=d.clientHeight?0:window.scrollY/max;return value})()
+            """.trimIndent(),
+            EPUB_CHAPTER_RATIO_SCRIPT,
+        )
+    }
+
+    @Test
     fun compact_width_wraps_five_actions_into_two_rows() {
         val rows = readerToolbarRows(
             widthDp = 360,

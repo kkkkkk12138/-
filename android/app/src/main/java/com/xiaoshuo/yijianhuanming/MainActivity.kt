@@ -35,6 +35,7 @@ import com.xiaoshuo.yijianhuanming.reader.ReaderSettingsSheet
 import com.xiaoshuo.yijianhuanming.library.LibraryViewModel
 import com.xiaoshuo.yijianhuanming.library.ReadingProgress
 import com.xiaoshuo.yijianhuanming.library.ReadingProgressCoordinator
+import com.xiaoshuo.yijianhuanming.library.initializeEpubProgress
 import com.xiaoshuo.yijianhuanming.library.txtRatio
 import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.AppNavHost
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
     private var txtSource: TxtContentSource? = null
     private var txtProgressCoordinator: ReadingProgressCoordinator? = null
     private var epubSource: EpubContentSource? = null
+    private var epubProgressCoordinator: ReadingProgressCoordinator? = null
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             resolveInput(
@@ -171,9 +173,7 @@ class MainActivity : ComponentActivity() {
                         url = document.initialUrl,
                         profile = WebViewProfile.LOCAL_READER,
                         epubDocument = document,
-                        onEpubLocationChanged = { location ->
-                            persistEpubLocation(input, location)
-                        },
+                        epubProgressCoordinator = epubProgressCoordinator,
                         onClose = ::closeEpub,
                         onClearHistory = onClearHistory,
                         onClearEpubCache = onClearEpubCache,
@@ -357,6 +357,17 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val saved = readerSessionDao.findBySourceId(input.uri.toString())
             val savedLocation = saved?.chapterId?.let { EpubLocation(it, saved.scrollRatio) }
+            val progressCoordinator = ReadingProgressCoordinator(lifecycleScope) { progress ->
+                readerSessionDao.saveProgress(
+                    sourceId = input.uri.toString(),
+                    chapterId = progress.chapterId,
+                    scrollRatio = progress.scrollRatio,
+                    textOffset = null,
+                    textTotalAtSave = null,
+                    lastOpenedAt = progress.lastOpenedAt,
+                )
+            }
+            epubProgressCoordinator = progressCoordinator
             val source = EpubContentSource(this@MainActivity, input.uri, savedLocation)
             epubSource = source
             val result = source.open()
@@ -371,33 +382,23 @@ class MainActivity : ComponentActivity() {
                     uri = input.uri.toString(),
                     lastOpenedAt = System.currentTimeMillis(),
                 )
+                initializeEpubProgress(
+                    location = document.initialLocation,
+                    repaired = document.initialLocationRepaired,
+                    coordinator = progressCoordinator,
+                )
                 epubDocument = document
             }
             result.exceptionOrNull()?.let {
                 readerInput = null
                 epubSource = null
+                epubProgressCoordinator = null
                 Toast.makeText(
                     this@MainActivity,
                     it.message ?: "无法打开 EPUB",
                     Toast.LENGTH_LONG,
                 ).show()
             }
-        }
-    }
-
-    private fun persistEpubLocation(
-        input: ReaderInput.EpubDocument,
-        location: EpubLocation,
-    ) {
-        lifecycleScope.launch {
-            readerSessionDao.saveProgress(
-                sourceId = input.uri.toString(),
-                chapterId = location.chapterId,
-                scrollRatio = location.scrollRatio,
-                textOffset = null,
-                textTotalAtSave = null,
-                lastOpenedAt = System.currentTimeMillis(),
-            )
         }
     }
 
@@ -418,6 +419,7 @@ class MainActivity : ComponentActivity() {
         readerInput = null
         epubDocument = null
         epubSource = null
+        epubProgressCoordinator = null
         lifecycleScope.launch { source?.close() }
     }
 

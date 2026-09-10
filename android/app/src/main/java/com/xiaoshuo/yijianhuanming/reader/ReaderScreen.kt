@@ -55,10 +55,17 @@ import com.xiaoshuo.yijianhuanming.navigation.ReaderBackTarget
 import com.xiaoshuo.yijianhuanming.navigation.readerBackTarget
 import com.xiaoshuo.yijianhuanming.library.ReadingProgress
 import com.xiaoshuo.yijianhuanming.library.ReadingProgressCoordinator
+import com.xiaoshuo.yijianhuanming.library.epubProgress
+import com.xiaoshuo.yijianhuanming.library.saveEpubBeforeChapterChange
 import com.xiaoshuo.yijianhuanming.library.txtRatio
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+
+internal const val EPUB_CHAPTER_RATIO_SCRIPT =
+    "(function(){const d=document.documentElement;const max=Math.max(1,d.scrollHeight-d.clientHeight);const value=d.scrollHeight<=d.clientHeight?0:window.scrollY/max;return value})()"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +79,8 @@ fun ReaderScreen(
     txtProgressCoordinator: ReadingProgressCoordinator? = null,
     onTxtProgressChanged: suspend (ReadingProgress) -> Unit = {},
     epubDocument: EpubReaderDocument? = null,
-    onEpubLocationChanged: (EpubLocation) -> Unit = {},
+    epubProgressCoordinator: ReadingProgressCoordinator? = null,
+    onEpubLocationChanged: suspend (EpubLocation) -> Unit = {},
     onClearHistory: () -> Unit = {},
     onClearEpubCache: () -> Unit = {},
     confirmedCleartextUrl: String? = null,
@@ -99,6 +107,7 @@ fun ReaderScreen(
     var needsInitialTxtRestore by remember(txtDocument) { mutableStateOf(txtDocument != null) }
     var fontScale by remember { mutableStateOf(1f) }
     var lastTxtSampleAt by remember(txtDocument) { mutableStateOf(0L) }
+    var epubScrollSaveJob by remember(epubDocument) { mutableStateOf<Job?>(null) }
     val fallbackTxtProgressCoordinator = remember(txtDocument?.sessionId, txtSourceId) {
         ReadingProgressCoordinator(writer = onTxtProgressChanged).also { coordinator ->
             txtDocument?.let { document ->
@@ -113,7 +122,20 @@ fun ReaderScreen(
             }
         }
     }
-    val progressCoordinator = txtProgressCoordinator ?: fallbackTxtProgressCoordinator
+    val activeTxtProgressCoordinator = txtProgressCoordinator ?: fallbackTxtProgressCoordinator
+    val fallbackEpubProgressCoordinator = remember(epubDocument?.sessionId) {
+        ReadingProgressCoordinator(writer = { progress ->
+            progress.chapterId?.let { chapterId ->
+                onEpubLocationChanged(EpubLocation(chapterId, progress.scrollRatio))
+            }
+        }).also { coordinator ->
+            epubDocument?.initialLocation?.let { location ->
+                coordinator.rememberConfirmed(epubProgress(location, System.currentTimeMillis()))
+            }
+        }
+    }
+    val activeEpubProgressCoordinator =
+        epubProgressCoordinator ?: fallbackEpubProgressCoordinator
     val currentChapter = epubDocument?.chapter(currentChapterId)
     suspend fun captureTxtProgress(): ReadingProgress? {
         val document = txtDocument ?: return null
@@ -131,32 +153,39 @@ fun ReaderScreen(
     fun saveTxtProgress() {
         if (txtDocument == null) return
         scope.launch {
-            progressCoordinator.captureAndSave(::captureTxtProgress)
+            activeTxtProgressCoordinator.captureAndSave(::captureTxtProgress)
         }
     }
-    fun saveEpubLocation(afterSave: () -> Unit = {}) {
+    suspend fun captureEpubProgress(): ReadingProgress? {
         val chapterId = currentChapterId
-        val activeWebView = webView
-        if (chapterId == null || activeWebView == null) {
-            afterSave()
-            return
-        }
-        activeWebView.evaluateJavascript(
-            "(function(){const d=document.documentElement;const m=Math.max(0,d.scrollHeight-innerHeight);return m===0?0:scrollY/m})()",
-        ) { raw ->
-            val ratio = raw?.trim('"')?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
-            onEpubLocationChanged(EpubLocation(chapterId, ratio.coerceIn(0.0, 1.0)))
-            afterSave()
+        val ratio = webView?.evaluateDouble(EPUB_CHAPTER_RATIO_SCRIPT) ?: return null
+        return epubProgress(EpubLocation(chapterId ?: return null, ratio), System.currentTimeMillis())
+    }
+    fun saveEpubLocation() {
+        if (epubDocument == null) return
+        scope.launch {
+            activeEpubProgressCoordinator.captureAndSave(::captureEpubProgress)
         }
     }
     fun closeReader() {
-        if (txtDocument == null) {
-            saveEpubLocation(onClose)
+        if (epubDocument != null) {
+            scope.launch {
+                activeEpubProgressCoordinator.saveBeforeClose(
+                    timeoutMillis = 300,
+                    capture = ::captureEpubProgress,
+                )
+                onClose()
+            }
+            return
+        }
+        val activeTxtDocument = txtDocument
+        if (activeTxtDocument == null) {
+            onClose()
             return
         }
         scope.launch {
-            progressCoordinator.saveBeforeClose(
-                totalUtf16Units = txtDocument.totalUtf16Units,
+            activeTxtProgressCoordinator.saveBeforeClose(
+                totalUtf16Units = activeTxtDocument.totalUtf16Units,
                 timeoutMillis = 300,
             ) {
                 webView?.evaluateLong(
@@ -168,11 +197,23 @@ fun ReaderScreen(
     }
     fun openChapter(chapterId: String) {
         val chapter = epubDocument?.chapter(chapterId) ?: return
-        saveEpubLocation {
-            currentChapterId = chapter.id
-            currentUrl = chapter.url
-            needsInitialRestore = false
-            showContents = false
+        val oldChapterId = currentChapterId ?: return
+        epubScrollSaveJob?.cancel()
+        scope.launch {
+            saveEpubBeforeChapterChange(
+                oldChapterId = oldChapterId,
+                newChapterId = chapter.id,
+                coordinator = activeEpubProgressCoordinator,
+                captureRatio = {
+                    webView?.evaluateDouble(EPUB_CHAPTER_RATIO_SCRIPT)
+                },
+                loadChapter = {
+                    currentChapterId = chapter.id
+                    currentUrl = chapter.url
+                    needsInitialRestore = false
+                    showContents = false
+                },
+            )
         }
     }
     val callbacks = remember {
@@ -193,6 +234,7 @@ fun ReaderScreen(
     DisposableEffect(lifecycleOwner, epubDocument, currentChapterId, webView) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
+                epubScrollSaveJob?.cancel()
                 saveEpubLocation()
                 saveTxtProgress()
             }
@@ -284,7 +326,7 @@ fun ReaderScreen(
                                     val ratio = epubDocument?.initialLocation?.scrollRatio ?: 0.0
                                     webView?.post {
                                         webView?.evaluateJavascript(
-                                            "scrollTo(0,Math.max(0,document.documentElement.scrollHeight-innerHeight)*$ratio)",
+                                            "scrollTo(0,Math.max(1,document.documentElement.scrollHeight-document.documentElement.clientHeight)*$ratio)",
                                             null,
                                         )
                                     }
@@ -308,12 +350,20 @@ fun ReaderScreen(
                             },
                         ).also {
                             webView = it
-                            if (txtDocument != null) {
+                            if (txtDocument != null || epubDocument != null) {
                                 it.setOnScrollChangeListener { _, _, _, _, _ ->
-                                    val now = SystemClock.elapsedRealtime()
-                                    if (now - lastTxtSampleAt >= 2_000) {
-                                        lastTxtSampleAt = now
-                                        saveTxtProgress()
+                                    if (txtDocument != null) {
+                                        val now = SystemClock.elapsedRealtime()
+                                        if (now - lastTxtSampleAt >= 2_000) {
+                                            lastTxtSampleAt = now
+                                            saveTxtProgress()
+                                        }
+                                    } else {
+                                        epubScrollSaveJob?.cancel()
+                                        epubScrollSaveJob = scope.launch {
+                                            delay(2_000)
+                                            activeEpubProgressCoordinator.captureAndSave(::captureEpubProgress)
+                                        }
                                     }
                                 }
                             }
@@ -324,6 +374,7 @@ fun ReaderScreen(
                         if (webView.url != currentUrl) webView.loadUrl(currentUrl)
                     },
                     onRelease = {
+                        epubScrollSaveJob?.cancel()
                         webView = null
                         it.destroy()
                     },
@@ -532,6 +583,20 @@ private suspend fun ReaderWebView.evaluateLong(script: String): Long? =
                         ?.toDoubleOrNull()
                         ?.takeIf(Double::isFinite)
                         ?.toLong(),
+                )
+            }
+        }
+    }
+
+private suspend fun ReaderWebView.evaluateDouble(script: String): Double? =
+    suspendCancellableCoroutine { continuation ->
+        evaluateJavascript(script) { raw ->
+            if (continuation.isActive) {
+                continuation.resume(
+                    raw
+                        ?.trim('"')
+                        ?.takeUnless { it == "null" || it == "undefined" }
+                        ?.toDoubleOrNull(),
                 )
             }
         }
