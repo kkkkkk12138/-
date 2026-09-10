@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -137,6 +138,25 @@ class ReaderViewModelTest {
         assertEquals(0, repository.saveCalls)
         assertEquals(RuntimeState.Loading, viewModel.state.value.runtimeState)
         assertEquals(ApplyState.Idle, viewModel.state.value.applyState)
+    }
+
+    @Test
+    fun ending_session_invalidates_late_runtime_setup_callback() = runBlocking {
+        val repository = FakeRuleRepository()
+        val runtime = BlockingRuntime()
+        val viewModel = ReaderViewModel(repository, testScope())
+        yield()
+        viewModel.startSession("reader-a")
+        val token = viewModel.beginRuntime()
+
+        val completing = async { viewModel.completeRuntimeSetup(token, runtime) }
+        runtime.entered.await()
+        viewModel.endSession("reader-a")
+        runtime.release.complete(Unit)
+        completing.await()
+
+        assertFalse(viewModel.state.value.isCurrent(token))
+        assertEquals(RuntimeState.Loading, viewModel.state.value.runtimeState)
     }
 
     @Test

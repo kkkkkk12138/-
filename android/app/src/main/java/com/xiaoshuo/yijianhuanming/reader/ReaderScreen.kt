@@ -71,6 +71,7 @@ internal const val EPUB_CHAPTER_RATIO_SCRIPT =
 @Composable
 fun ReaderScreen(
     url: String,
+    readerSessionId: String = url,
     onClose: () -> Unit,
     profile: WebViewProfile = WebViewProfile.REMOTE_PUBLIC_WEB,
     txtPathHandler: TxtAssetPathHandler? = null,
@@ -137,6 +138,15 @@ fun ReaderScreen(
     val activeEpubProgressCoordinator =
         epubProgressCoordinator ?: fallbackEpubProgressCoordinator
     val currentChapter = epubDocument?.chapter(currentChapterId)
+    val persistentError = when (val runtimeState = state.runtimeState) {
+        is RuntimeState.Failed -> runtimeState.error
+        is RuntimeState.OutOfSync -> runtimeState.error
+        else -> null
+    }
+    DisposableEffect(readerSessionId) {
+        viewModel.startSession(readerSessionId)
+        onDispose { viewModel.endSession(readerSessionId) }
+    }
     suspend fun captureTxtProgress(): ReadingProgress? {
         val document = txtDocument ?: return null
         val offset = webView?.evaluateLong(
@@ -310,6 +320,23 @@ fun ReaderScreen(
                             .fillMaxWidth()
                             .weight(1f),
                     )
+                } else if (persistentError != null) {
+                    ReaderErrorScreen(
+                        error = persistentError,
+                        onRecovery = {
+                            when (persistentError.recoveryAction) {
+                                RecoveryAction.RetryRuntime,
+                                RecoveryAction.ReloadDocument,
+                                -> viewModel.beginRuntime()
+                                RecoveryAction.RetryApply,
+                                RecoveryAction.ReopenDatabaseAndRetryApply,
+                                -> Unit
+                                else -> closeReader()
+                            }
+                        },
+                        onReturnHome = ::closeReader,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
                 } else {
                     AndroidView(
                     factory = { androidContext ->
@@ -342,9 +369,6 @@ fun ReaderScreen(
                                             null,
                                         )
                                         needsInitialTxtRestore = false
-                                    }
-                                    result.onFailure {
-                                        Toast.makeText(context, it.message ?: "规则重新应用失败", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },

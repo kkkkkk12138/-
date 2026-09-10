@@ -99,6 +99,8 @@ class ReaderWebView(
     override fun destroy() {
         if (profile == WebViewProfile.REMOTE_PUBLIC_WEB) {
             clearSession()
+        } else {
+            runtimeController.invalidate()
         }
         removeAllViews()
         super.destroy()

@@ -44,6 +44,16 @@ class ReaderViewModel internal constructor(
         mutableState.update { it.startSession(sessionId) }
     }
 
+    fun endSession(sessionId: String) {
+        mutableState.update { current ->
+            if (current.readerSessionId == sessionId) {
+                current.startSession(UUID.randomUUID().toString())
+            } else {
+                current
+            }
+        }
+    }
+
     fun beginRuntime(): RuntimeToken {
         mutableState.update { it.beginRuntime() }
         return mutableState.value.currentRuntimeToken()

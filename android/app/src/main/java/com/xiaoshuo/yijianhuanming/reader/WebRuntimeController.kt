@@ -252,6 +252,10 @@ class WebRuntimeController(
         webView.clearHistory()
     }
 
+    fun invalidate() {
+        generations.invalidate()
+    }
+
     companion object {
         private const val RUNTIME_ASSET = "name-replacer.js"
     }

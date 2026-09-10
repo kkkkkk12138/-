@@ -21,12 +21,56 @@ import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.ReaderPaneMode
 import com.xiaoshuo.yijianhuanming.reader.ReaderToolbar
 import com.xiaoshuo.yijianhuanming.reader.ReaderSettingsSheet
+import com.xiaoshuo.yijianhuanming.reader.ReaderLoadingScreen
+import com.xiaoshuo.yijianhuanming.reader.ReaderErrorScreen
+import com.xiaoshuo.yijianhuanming.reader.ReaderError
+import com.xiaoshuo.yijianhuanming.reader.ReaderErrorCode
+import com.xiaoshuo.yijianhuanming.reader.RecoveryAction
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertTrue
 
 class AdaptiveReaderTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun document_loading_replaces_empty_home_and_can_be_cancelled() {
+        var cancelled = false
+        compose.setContent {
+            MaterialTheme {
+                ReaderLoadingScreen(
+                    displayName = "真实文件名.epub",
+                    onCancel = { cancelled = true },
+                )
+            }
+        }
+
+        compose.onNodeWithText("正在打开《真实文件名.epub》").assertIsDisplayed()
+        compose.onNodeWithText("取消").assertIsDisplayed().performClick()
+        assertTrue(cancelled)
+    }
+
+    @Test
+    fun permission_error_only_offers_the_structured_recovery_action() {
+        var selectedAnotherFile = false
+        compose.setContent {
+            MaterialTheme {
+                ReaderErrorScreen(
+                    error = ReaderError(
+                        ReaderErrorCode.FILE_PERMISSION_LOST,
+                        "文件读取权限已失效",
+                        RecoveryAction.SelectAnotherFile,
+                    ),
+                    onRecovery = { selectedAnotherFile = true },
+                )
+            }
+        }
+
+        compose.onNodeWithText("文件读取权限已失效").assertIsDisplayed()
+        compose.onNodeWithText("重新选择文件").performClick()
+        assertTrue(selectedAnotherFile)
+    }
 
     @Test
     fun phone_opens_tools_in_bottom_sheet_with_talkback_labels() {
