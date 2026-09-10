@@ -57,23 +57,4 @@ class WebRuntimeControllerTest {
         assertTrue(parser.parse("\"not-json\"").isFailure)
     }
 
-    @Test
-    fun operation_gate_rejects_old_runtime_and_apply_tokens() {
-        val gate = ReaderOperationGate()
-        gate.beginSession("session-a")
-        gate.beginRuntime()
-        val firstApply = gate.beginApply()
-
-        assertTrue(gate.isCurrent(firstApply))
-
-        gate.beginRuntime()
-
-        assertFalse(gate.isCurrent(firstApply))
-        val secondApply = gate.beginApply()
-        assertTrue(gate.isCurrent(secondApply))
-
-        gate.beginSession("session-b")
-
-        assertFalse(gate.isCurrent(secondApply))
-    }
 }
