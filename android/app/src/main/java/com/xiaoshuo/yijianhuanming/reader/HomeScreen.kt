@@ -1,5 +1,6 @@
 package com.xiaoshuo.yijianhuanming.reader
 
+import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,26 +12,55 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.xiaoshuo.yijianhuanming.data.ReaderSessionEntity
+import com.xiaoshuo.yijianhuanming.intake.ReaderInput
+import com.xiaoshuo.yijianhuanming.intake.UrlEntryDialog
+import com.xiaoshuo.yijianhuanming.intake.UrlEntryResult
 import com.xiaoshuo.yijianhuanming.library.RecentReadingList
 
 @Composable
 fun HomeScreen(
-    onOpenUrl: () -> Unit,
+    onOpenUrl: (ReaderInput.WebUrl) -> Unit,
     onOpenDocument: () -> Unit,
     recent: List<ReaderSessionEntity> = emptyList(),
     onOpenRecent: (ReaderSessionEntity) -> Unit = {},
+    readClipboard: (() -> String?)? = null,
+    resolveUrl: suspend (String) -> UrlEntryResult = {
+        UrlEntryResult.Invalid(
+            ReaderError(
+                ReaderErrorCode.INVALID_URL,
+                "链接入口尚未配置",
+                RecoveryAction.EditUrl,
+            ),
+        )
+    },
+    openUrlDialogInitially: Boolean = false,
+    onUrlDialogShown: () -> Unit = {},
 ) {
+    var showUrlDialog by remember { mutableStateOf(openUrlDialogInitially) }
+    val context = LocalContext.current
+    LaunchedEffect(openUrlDialogInitially) {
+        if (openUrlDialogInitially) {
+            showUrlDialog = true
+            onUrlDialogShown()
+        }
+    }
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         ) {
             Button(
-                onClick = onOpenUrl,
+                onClick = { showUrlDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
@@ -55,5 +85,22 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+    if (showUrlDialog) {
+        UrlEntryDialog(
+            onDismiss = { showUrlDialog = false },
+            onOpen = {
+                showUrlDialog = false
+                onOpenUrl(it)
+            },
+            readClipboard = readClipboard ?: {
+                context.getSystemService(ClipboardManager::class.java)
+                    ?.primaryClip
+                    ?.getItemAt(0)
+                    ?.coerceToText(context)
+                    ?.toString()
+            },
+            resolveUrl = resolveUrl,
+        )
     }
 }

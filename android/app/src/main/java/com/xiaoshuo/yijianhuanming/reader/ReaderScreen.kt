@@ -12,12 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -59,6 +64,8 @@ fun ReaderScreen(
     onEpubLocationChanged: (EpubLocation) -> Unit = {},
     onClearHistory: () -> Unit = {},
     onClearEpubCache: () -> Unit = {},
+    confirmedCleartextUrl: String? = null,
+    onOpenOtherUrl: () -> Unit = onClose,
     viewModel: ReaderViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -69,6 +76,8 @@ fun ReaderScreen(
     var showContents by remember { mutableStateOf(false) }
     var runtime by remember { mutableStateOf<RuleRuntime?>(null) }
     var webView by remember { mutableStateOf<ReaderWebView?>(null) }
+    var loginBlocked by remember(url) { mutableStateOf(false) }
+    var pendingCleartextUrl by remember(url) { mutableStateOf<String?>(null) }
     var currentChapterId by remember(epubDocument) {
         mutableStateOf(epubDocument?.initialLocation?.chapterId)
     }
@@ -105,11 +114,15 @@ fun ReaderScreen(
     val callbacks = remember {
         object : WebSecurityCallbacks {
             override fun onNavigationBlocked(decision: NavigationDecision, url: String) {
-                Toast.makeText(context, decision.message(), Toast.LENGTH_LONG).show()
+                when (decision) {
+                    NavigationDecision.BlockLogin -> loginBlocked = true
+                    NavigationDecision.ConfirmCleartext -> pendingCleartextUrl = url
+                    else -> Toast.makeText(context, decision.message(), Toast.LENGTH_LONG).show()
+                }
             }
 
             override fun onLoginRiskDetected() {
-                Toast.makeText(context, "检测到登录页面，已停止继续浏览", Toast.LENGTH_LONG).show()
+                loginBlocked = true
             }
         }
     }
@@ -180,7 +193,16 @@ fun ReaderScreen(
                     onPrevious = { currentChapter?.previousChapterId?.let(::openChapter) },
                     onNext = { currentChapter?.nextChapterId?.let(::openChapter) },
                 )
-                AndroidView(
+                if (loginBlocked) {
+                    LoginBlockedContent(
+                        onReturnHome = onClose,
+                        onOpenOtherUrl = onOpenOtherUrl,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                } else {
+                    AndroidView(
                     factory = { androidContext ->
                         ReaderWebView(
                             context = androidContext,
@@ -188,7 +210,8 @@ fun ReaderScreen(
                             securityCallbacks = callbacks,
                             txtPathHandler = txtPathHandler,
                             epubPathHandler = epubDocument?.pathHandler,
-                            onRuntimeReady = { installedRuntime ->
+                            confirmedCleartextUrl = confirmedCleartextUrl,
+                            onRuntimeReady = { installedRuntime, complete ->
                                 runtime = installedRuntime
                                 if (needsInitialRestore) {
                                     val ratio = epubDocument?.initialLocation?.scrollRatio ?: 0.0
@@ -201,12 +224,10 @@ fun ReaderScreen(
                                     needsInitialRestore = false
                                 }
                                 scope.launch {
-                                    viewModel.reapplyPersisted(installedRuntime).onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            it.message ?: "规则重新应用失败",
-                                            Toast.LENGTH_LONG,
-                                        ).show()
+                                    val result = viewModel.reapplyPersisted(installedRuntime)
+                                    complete(result.isSuccess)
+                                    result.onFailure {
+                                        Toast.makeText(context, it.message ?: "规则重新应用失败", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },
@@ -224,6 +245,7 @@ fun ReaderScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                }
             }
         }
     }
@@ -264,6 +286,46 @@ fun ReaderScreen(
                     onNext = { currentChapter?.nextChapterId?.let(::openChapter) },
                 )
             }
+        }
+        pendingCleartextUrl?.let { target ->
+            AlertDialog(
+                onDismissRequest = { pendingCleartextUrl = null },
+                title = { Text("此链接未加密") },
+                text = { Text("继续打开可能暴露或篡改阅读内容。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingCleartextUrl = null
+                            webView?.confirmCleartextAndLoad(target)
+                        },
+                    ) { Text("仍要打开") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCleartextUrl = null }) { Text("取消") }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoginBlockedContent(
+    onReturnHome: () -> Unit,
+    onOpenOtherUrl: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("不支持在本应用内登录", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onReturnHome, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("返回首页")
+        }
+        TextButton(onClick = onOpenOtherUrl, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("打开其他公开链接")
         }
     }
 }

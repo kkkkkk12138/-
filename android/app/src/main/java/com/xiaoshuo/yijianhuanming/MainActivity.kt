@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xiaoshuo.yijianhuanming.intake.AndroidInputResolver
 import com.xiaoshuo.yijianhuanming.intake.ReaderInput
+import com.xiaoshuo.yijianhuanming.intake.UrlEntryResolver
 import com.xiaoshuo.yijianhuanming.content.txt.TxtContentSource
 import com.xiaoshuo.yijianhuanming.content.txt.TxtOpenResult
 import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
@@ -42,7 +43,9 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var readerSessionDao: ReaderSessionDao
 
     private val inputResolver by lazy { AndroidInputResolver(this) }
+    private val urlEntryResolver by lazy { UrlEntryResolver(inputResolver) }
     private var readerInput by mutableStateOf<ReaderInput?>(null)
+    private var requestUrlDialog by mutableStateOf(false)
     private var txtDocument by mutableStateOf<TxtReaderDocument?>(null)
     private var epubDocument by mutableStateOf<EpubReaderDocument?>(null)
     private var txtSource: TxtContentSource? = null
@@ -86,7 +89,7 @@ class MainActivity : ComponentActivity() {
                             },
                         ) {
                             HomeScreen(
-                                onOpenUrl = {},
+                                onOpenUrl = ::openUrlFromDialog,
                                 onOpenDocument = {
                                     openDocument.launch(
                                         arrayOf("text/plain", "application/epub+zip"),
@@ -94,6 +97,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 recent = libraryState.recent,
                                 onOpenRecent = { openRecent(it) },
+                                resolveUrl = urlEntryResolver::resolve,
+                                openUrlDialogInitially = requestUrlDialog,
+                                onUrlDialogShown = { requestUrlDialog = false },
                             )
                         }
                     },
@@ -126,6 +132,12 @@ class MainActivity : ComponentActivity() {
                 is ReaderInput.WebUrl -> ReaderScreen(
                     url = input.uri.toString(),
                     onClose = { readerInput = null },
+                    confirmedCleartextUrl = input.uri.toString()
+                        .takeIf { input.uri.scheme.equals("http", ignoreCase = true) },
+                    onOpenOtherUrl = {
+                        readerInput = null
+                        requestUrlDialog = true
+                    },
                     onClearHistory = onClearHistory,
                     onClearEpubCache = onClearEpubCache,
                 )
@@ -139,8 +151,9 @@ class MainActivity : ComponentActivity() {
                         onClearEpubCache = onClearEpubCache,
                     )
                 } ?: HomeScreen(
-                    onOpenUrl = {},
+                    onOpenUrl = ::openUrlFromDialog,
                     onOpenDocument = {},
+                    resolveUrl = urlEntryResolver::resolve,
                 )
                 is ReaderInput.EpubDocument -> epubDocument?.let { document ->
                     ReaderScreen(
@@ -155,8 +168,9 @@ class MainActivity : ComponentActivity() {
                         onClearEpubCache = onClearEpubCache,
                     )
                 } ?: HomeScreen(
-                    onOpenUrl = {},
+                    onOpenUrl = ::openUrlFromDialog,
                     onOpenDocument = {},
+                    resolveUrl = urlEntryResolver::resolve,
                 )
                 else -> Unit
             }
@@ -211,6 +225,11 @@ class MainActivity : ComponentActivity() {
             is ReaderInput.TxtDocument -> openTxt(input)
             is ReaderInput.EpubDocument -> openEpub(input)
         }
+    }
+
+    private fun openUrlFromDialog(input: ReaderInput.WebUrl) {
+        readerInput = input
+        persistBasicSession(input.uri.toString(), "WEB", input.uri.host.orEmpty())
     }
 
     private fun restoreReaderInput(state: Bundle) {

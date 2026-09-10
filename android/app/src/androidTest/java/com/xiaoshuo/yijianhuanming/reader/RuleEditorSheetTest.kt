@@ -60,7 +60,13 @@ class RuleEditorSheetTest {
                 state = RuleEditorState(
                     draft = listOf(ReplaceRule("draft", "旧名", "新名", 0)),
                     editingRuleId = "draft",
-                    error = "保存失败，请重试",
+                    applyState = ApplyState.Failed(
+                        ReaderError(
+                            ReaderErrorCode.RULE_SAVE_FAILED,
+                            "保存失败，请重试",
+                            RecoveryAction.ReopenDatabaseAndRetryApply,
+                        ),
+                    ),
                 ),
                 onEdit = {},
                 onChange = { _, _, _ -> },
