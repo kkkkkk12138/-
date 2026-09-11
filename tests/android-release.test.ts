@@ -85,8 +85,9 @@ describe('Android release', () => {
       'instrumentation:\n    runs-on: macos-14',
     );
     expect(workflow).toContain(
-      'emulator-options: -no-window -gpu host -feature -Vulkan -noaudio -no-boot-anim',
+      'emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim',
     );
+    expect(workflow).toContain('emulator-boot-timeout: 900');
   });
 
   it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
