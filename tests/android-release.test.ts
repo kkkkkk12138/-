@@ -74,4 +74,15 @@ describe('Android release', () => {
     expect(workflow).toContain(':app:lintDebug');
     expect(workflow).toContain(':app:assembleDebug');
   });
+
+  it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain("tags: ['v*-android-beta']");
+    expect(workflow).toContain('softprops/action-gh-release@v2');
+    expect(workflow).toContain('prerelease: true');
+    expect(workflow).toContain(
+      'android/app/build/outputs/apk/debug/app-debug.apk',
+    );
+  });
 });
