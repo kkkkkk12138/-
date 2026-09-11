@@ -57,4 +57,21 @@ describe('Android release', () => {
       access('scripts/verify-android-release.mjs'),
     ]);
   });
+
+  it('runs JVM, migration, Compose, WebView, lint, and debug assembly gates in CI', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain(':app:testDebugUnitTest');
+    expect(workflow).toContain(
+      'com.xiaoshuo.yijianhuanming.data.AppDatabaseTest',
+    );
+    expect(workflow).toContain(
+      'com.xiaoshuo.yijianhuanming.content.web.WebViewSecurityTest',
+    );
+    expect(workflow).toContain(
+      'com.xiaoshuo.yijianhuanming.AdaptiveReaderTest',
+    );
+    expect(workflow).toContain(':app:lintDebug');
+    expect(workflow).toContain(':app:assembleDebug');
+  });
 });
