@@ -57,7 +57,7 @@ jobs:
         with:
           api-level: 36
           arch: x86_64
-          target: google_apis
+          target: aosp_atd
           script: |
             run_suite() {
               suite="$1"
