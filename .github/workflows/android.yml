@@ -2,7 +2,8 @@ name: Android
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
+    tags: ['v*-android-beta']
   pull_request:
 
 permissions:
@@ -29,3 +30,55 @@ jobs:
       - run: npm test
       - run: npm run build:android-runtime
       - run: ./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+  instrumentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Compile Room, Compose, and WebView instrumentation
+        run: ./android/gradlew -p android :app:assembleDebugAndroidTest
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [debug, instrumentation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      - run: npm ci
+      - run: npm run build:android-runtime
+      - run: ./android/gradlew -p android :app:assembleDebug
+      - name: Prepare release assets
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk
+          sha256sum xiaoshuo-yijian-huanming-android-0.2.0-debug.apk \
+            > xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256
+      - name: Publish Android beta prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Android 0.2.0 核心体验修复测试版
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk
+            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256

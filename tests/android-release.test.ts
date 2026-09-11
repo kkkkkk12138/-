@@ -57,4 +57,37 @@ describe('Android release', () => {
       access('scripts/verify-android-release.mjs'),
     ]);
   });
+
+  it('runs JVM, lint, app assembly, and instrumentation compilation gates in CI', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('branches: [main]');
+    expect(workflow).toContain(':app:testDebugUnitTest');
+    expect(workflow).toContain(':app:lintDebug');
+    expect(workflow).toContain(':app:assembleDebug');
+    expect(workflow).toContain(':app:assembleDebugAndroidTest');
+    expect(workflow).toContain('instrumentation:\n    runs-on: ubuntu-latest');
+    await Promise.all([
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/data/AppDatabaseTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/content/web/WebViewSecurityTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/AdaptiveReaderTest.kt',
+      ),
+    ]);
+  });
+
+  it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain("tags: ['v*-android-beta']");
+    expect(workflow).toContain('softprops/action-gh-release@v2');
+    expect(workflow).toContain('prerelease: true');
+    expect(workflow).toContain(
+      'android/app/build/outputs/apk/debug/app-debug.apk',
+    );
+  });
 });
