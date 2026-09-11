@@ -82,7 +82,10 @@ describe('Android release', () => {
     expect(workflow).toContain('api-level: 35');
     expect(workflow).toContain('target: google_apis');
     expect(workflow).toContain(
-      'emulator-options: -no-window -gpu swiftshader -feature -Vulkan -noaudio -no-boot-anim',
+      'instrumentation:\n    runs-on: macos-14',
+    );
+    expect(workflow).toContain(
+      'emulator-options: -no-window -gpu host -feature -Vulkan -noaudio -no-boot-anim',
     );
   });
 
