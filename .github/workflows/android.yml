@@ -58,6 +58,7 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -noaudio -no-boot-anim
           script: |
             run_suite() {
               suite="$1"

@@ -81,6 +81,9 @@ describe('Android release', () => {
     expect(workflow).toContain('::error title=${suite} failed');
     expect(workflow).toContain('api-level: 35');
     expect(workflow).toContain('target: google_apis');
+    expect(workflow).toContain(
+      'emulator-options: -no-window -gpu swiftshader -feature -Vulkan -noaudio -no-boot-anim',
+    );
   });
 
   it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
