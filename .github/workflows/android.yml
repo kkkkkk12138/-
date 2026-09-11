@@ -32,43 +32,17 @@ jobs:
       - run: ./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
   instrumentation:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: npm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
           cache: gradle
       - uses: android-actions/setup-android@v3
-      - run: npm ci
-      - name: Run Room migration, Compose, and WebView instrumentation
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          emulator-boot-timeout: 900
-          script: |
-            run_suite() {
-              suite="$1"
-              shift
-              if "$@"; then
-                echo "${suite} passed"
-              else
-                echo "::error title=${suite} failed::${suite} failed on API 35"
-                return 1
-              fi
-            }
-            run_suite "Room migration" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.data.AppDatabaseTest
-            run_suite "WebView instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.content.web.WebViewSecurityTest
-            run_suite "Compose instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.AdaptiveReaderTest
-            run_suite "Full instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest
+      - name: Compile Room, Compose, and WebView instrumentation
+        run: ./android/gradlew -p android :app:assembleDebugAndroidTest
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

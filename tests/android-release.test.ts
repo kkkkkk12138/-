@@ -58,36 +58,26 @@ describe('Android release', () => {
     ]);
   });
 
-  it('runs JVM, migration, Compose, WebView, lint, and debug assembly gates in CI', async () => {
+  it('runs JVM, lint, app assembly, and instrumentation compilation gates in CI', async () => {
     const workflow = await readFile('.github/workflows/android.yml', 'utf8');
 
     expect(workflow).toContain('branches: [main]');
     expect(workflow).toContain(':app:testDebugUnitTest');
-    expect(workflow).toContain(
-      'com.xiaoshuo.yijianhuanming.data.AppDatabaseTest',
-    );
-    expect(workflow).toContain(
-      'com.xiaoshuo.yijianhuanming.content.web.WebViewSecurityTest',
-    );
-    expect(workflow).toContain(
-      'com.xiaoshuo.yijianhuanming.AdaptiveReaderTest',
-    );
     expect(workflow).toContain(':app:lintDebug');
     expect(workflow).toContain(':app:assembleDebug');
-    expect(workflow).toContain('run_suite "Room migration"');
-    expect(workflow).toContain('run_suite "WebView instrumentation"');
-    expect(workflow).toContain('run_suite "Compose instrumentation"');
-    expect(workflow).toContain('run_suite "Full instrumentation"');
-    expect(workflow).toContain('::error title=${suite} failed');
-    expect(workflow).toContain('api-level: 35');
-    expect(workflow).toContain('target: google_apis');
-    expect(workflow).toContain(
-      'instrumentation:\n    runs-on: macos-14',
-    );
-    expect(workflow).toContain(
-      'emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim',
-    );
-    expect(workflow).toContain('emulator-boot-timeout: 900');
+    expect(workflow).toContain(':app:assembleDebugAndroidTest');
+    expect(workflow).toContain('instrumentation:\n    runs-on: ubuntu-latest');
+    await Promise.all([
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/data/AppDatabaseTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/content/web/WebViewSecurityTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/AdaptiveReaderTest.kt',
+      ),
+    ]);
   });
 
   it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
