@@ -2,7 +2,7 @@ name: Android
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*-android-beta']
   pull_request:
 
@@ -59,10 +59,20 @@ jobs:
           arch: x86_64
           target: google_apis
           script: |
-            ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.data.AppDatabaseTest
-            ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.content.web.WebViewSecurityTest
-            ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.AdaptiveReaderTest
-            ./android/gradlew -p android :app:connectedDebugAndroidTest
+            run_suite() {
+              suite="$1"
+              shift
+              if "$@"; then
+                echo "${suite} passed"
+              else
+                echo "::error title=${suite} failed::${suite} failed on API 36"
+                return 1
+              fi
+            }
+            run_suite "Room migration" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.data.AppDatabaseTest
+            run_suite "WebView instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.content.web.WebViewSecurityTest
+            run_suite "Compose instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaoshuo.yijianhuanming.AdaptiveReaderTest
+            run_suite "Full instrumentation" ./android/gradlew -p android :app:connectedDebugAndroidTest
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
