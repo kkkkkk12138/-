@@ -8,9 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,7 +36,6 @@ import com.xiaoshuo.yijianhuanming.reader.ReadingSessionUiState
 import com.xiaoshuo.yijianhuanming.reader.ReadingSessionViewModel
 import com.xiaoshuo.yijianhuanming.reader.RecoveryAction
 import com.xiaoshuo.yijianhuanming.library.LibraryViewModel
-import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.NameReplacerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -107,6 +109,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @androidx.compose.runtime.Composable
     private fun LibraryContent(
         recent: List<ReaderSessionEntity>,
@@ -114,24 +117,25 @@ class MainActivity : ComponentActivity() {
         onClearRules: () -> Unit,
         onClearEpubCache: () -> Unit,
     ) {
-        AdaptiveReaderChrome(
-            supportingContent = {
+        var showSettings by remember { mutableStateOf(false) }
+        HomeScreen(
+            onOpenUrl = ::openUrlFromDialog,
+            onOpenDocument = ::selectDocument,
+            onOpenSettings = { showSettings = true },
+            recent = recent,
+            onOpenRecent = ::openRecent,
+            resolveUrl = urlEntryResolver::resolve,
+            openUrlDialogInitially = requestUrlDialog,
+            onUrlDialogShown = { requestUrlDialog = false },
+        )
+        if (showSettings) {
+            ModalBottomSheet(onDismissRequest = { showSettings = false }) {
                 ReaderSettingsSheet(
                     onClearHistory = onClearHistory,
                     onClearRules = onClearRules,
                     onClearEpubCache = onClearEpubCache,
                 )
-            },
-        ) {
-            HomeScreen(
-                onOpenUrl = ::openUrlFromDialog,
-                onOpenDocument = ::selectDocument,
-                recent = recent,
-                onOpenRecent = ::openRecent,
-                resolveUrl = urlEntryResolver::resolve,
-                openUrlDialogInitially = requestUrlDialog,
-                onUrlDialogShown = { requestUrlDialog = false },
-            )
+            }
         }
     }
 

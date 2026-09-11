@@ -177,6 +177,44 @@ class ReaderViewModelTest {
         assertEquals(emptyList<List<ReplaceRule>>(), runtime.applied)
     }
 
+    @Test
+    fun editing_revalidates_all_draft_rows_immediately() = runBlocking {
+        val repository = FakeRuleRepository()
+        val runtime = FakeRuntime()
+        val viewModel = ReaderViewModel(repository, testScope())
+        yield()
+        makeReady(viewModel, runtime)
+        viewModel.addRule()
+        val firstId = viewModel.state.value.draft.single().id
+
+        assertEquals(
+            RuleValidationError.SOURCE_REQUIRED,
+            viewModel.state.value.validationErrors[firstId],
+        )
+
+        viewModel.changeRule(firstId, "宝宝", "宝宝")
+        assertEquals(
+            RuleValidationError.SAME_VALUE,
+            viewModel.state.value.validationErrors[firstId],
+        )
+
+        viewModel.changeRule(firstId, "宝宝", "林晚")
+        assertTrue(viewModel.state.value.validationErrors.isEmpty())
+
+        viewModel.addRule()
+        val secondId = viewModel.state.value.draft.last().id
+        viewModel.changeRule(secondId, " 宝宝 ", "顾明")
+
+        assertEquals(
+            RuleValidationError.DUPLICATE_SOURCE,
+            viewModel.state.value.validationErrors[firstId],
+        )
+        assertEquals(
+            RuleValidationError.DUPLICATE_SOURCE,
+            viewModel.state.value.validationErrors[secondId],
+        )
+    }
+
     private suspend fun makeReady(viewModel: ReaderViewModel, runtime: RuleRuntime) {
         val token = viewModel.beginRuntime()
         viewModel.completeRuntimeSetup(token, runtime).getOrThrow()

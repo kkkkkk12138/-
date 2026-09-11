@@ -6,7 +6,6 @@ import android.webkit.WebStorage
 import android.os.SystemClock
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,15 +14,23 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -31,11 +38,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,7 +56,6 @@ import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
 import com.xiaoshuo.yijianhuanming.content.epub.EpubChapter
 import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
 import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
-import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.ReaderBackTarget
 import com.xiaoshuo.yijianhuanming.navigation.readerBackTarget
 import com.xiaoshuo.yijianhuanming.library.ReadingProgress
@@ -92,8 +97,11 @@ fun ReaderScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var announcedApplyGeneration by rememberSaveable(readerSessionId) { mutableStateOf(-1L) }
     var showRules by remember { mutableStateOf(false) }
     var showContents by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var runtime by remember { mutableStateOf<RuleRuntime?>(null) }
     var webView by remember { mutableStateOf<ReaderWebView?>(null) }
     var loginBlocked by remember(url) { mutableStateOf(false) }
@@ -138,6 +146,10 @@ fun ReaderScreen(
     val activeEpubProgressCoordinator =
         epubProgressCoordinator ?: fallbackEpubProgressCoordinator
     val currentChapter = epubDocument?.chapter(currentChapterId)
+    val readerTitle = txtDocument?.title
+        ?: epubDocument?.title
+        ?: android.net.Uri.parse(url).host
+        ?: "阅读"
     val persistentError = when (val runtimeState = state.runtimeState) {
         is RuntimeState.Failed -> runtimeState.error
         is RuntimeState.OutOfSync -> runtimeState.error
@@ -146,6 +158,13 @@ fun ReaderScreen(
     DisposableEffect(readerSessionId) {
         viewModel.startSession(readerSessionId)
         onDispose { viewModel.endSession(readerSessionId) }
+    }
+    androidx.compose.runtime.LaunchedEffect(state.applyGeneration, state.applyState) {
+        val success = state.applyState as? ApplyState.Success ?: return@LaunchedEffect
+        if (announcedApplyGeneration == state.applyGeneration) return@LaunchedEffect
+        announcedApplyGeneration = state.applyGeneration
+        showRules = false
+        snackbarHostState.showSnackbar(applyResultMessage(success.summary))
     }
     suspend fun captureTxtProgress(): ReadingProgress? {
         val document = txtDocument ?: return null
@@ -269,42 +288,30 @@ fun ReaderScreen(
             ReaderBackTarget.CloseReader -> closeReader()
         }
     }
-    AdaptiveReaderChrome(
-        supportingContent = {
-            ReaderSettingsSheet(
-                fontScale = fontScale,
-                onFontScaleChange = { scale ->
-                    fontScale = scale
-                    webView?.evaluateJavascript(
-                        "document.documentElement.style.fontSize='${(scale * 100).toInt()}%'",
-                        null,
-                    )
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text(readerTitle, maxLines = 2) },
+                navigationIcon = {
+                    TextButton(
+                        onClick = ::closeReader,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text("返回") }
                 },
-                onClearWebData = {
-                    CookieManager.getInstance().removeAllCookies(null)
-                    WebStorage.getInstance().deleteAllData()
-                    webView?.clearFormData()
-                    webView?.clearCache(true)
-                    webView?.clearHistory()
+                actions = {
+                    TextButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text("更多") }
                 },
-                onClearRules = {
-                    runtime?.let { current ->
-                        scope.launch { viewModel.clearRules(current) }
-                    }
-                },
-                onClearHistory = onClearHistory,
-                onClearEpubCache = onClearEpubCache,
             )
         },
-    ) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column {
+        bottomBar = {
+            if (!loginBlocked && persistentError == null) {
                 ReaderToolbar(
                     ruleCount = state.persisted.size,
                     onRules = { showRules = true },
-                    onClose = {
-                        closeReader()
-                    },
                     showContents = !epubDocument?.tableOfContents.isNullOrEmpty(),
                     onContents = { showContents = true },
                     hasPrevious = currentChapter?.previousChapterId != null,
@@ -312,33 +319,40 @@ fun ReaderScreen(
                     onPrevious = { currentChapter?.previousChapterId?.let(::openChapter) },
                     onNext = { currentChapter?.nextChapterId?.let(::openChapter) },
                 )
-                if (loginBlocked) {
-                    LoginBlockedContent(
-                        onReturnHome = onClose,
-                        onOpenOtherUrl = onOpenOtherUrl,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
-                } else if (persistentError != null) {
-                    ReaderErrorScreen(
-                        error = persistentError,
-                        onRecovery = {
-                            when (persistentError.recoveryAction) {
-                                RecoveryAction.RetryRuntime,
-                                RecoveryAction.ReloadDocument,
-                                -> viewModel.beginRuntime()
-                                RecoveryAction.RetryApply,
-                                RecoveryAction.ReopenDatabaseAndRetryApply,
-                                -> Unit
-                                else -> closeReader()
-                            }
-                        },
-                        onReturnHome = ::closeReader,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                    )
-                } else {
-                    AndroidView(
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { contentPadding ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+        ) {
+            if (loginBlocked) {
+                LoginBlockedContent(
+                    onReturnHome = onClose,
+                    onOpenOtherUrl = onOpenOtherUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (persistentError != null) {
+                ReaderErrorScreen(
+                    error = persistentError,
+                    onRecovery = {
+                        when (persistentError.recoveryAction) {
+                            RecoveryAction.RetryRuntime,
+                            RecoveryAction.ReloadDocument,
+                            -> viewModel.beginRuntime()
+                            RecoveryAction.RetryApply,
+                            RecoveryAction.ReopenDatabaseAndRetryApply,
+                            -> Unit
+                            else -> closeReader()
+                        }
+                    },
+                    onReturnHome = ::closeReader,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                AndroidView(
                     factory = { androidContext ->
                         ReaderWebView(
                             context = androidContext,
@@ -404,25 +418,50 @@ fun ReaderScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                }
             }
         }
     }
     MaterialTheme {
         if (showRules) {
-            ModalBottomSheet(onDismissRequest = { showRules = false }) {
-                RuleEditorSheet(
-                    state = state,
-                    onEdit = viewModel::editRule,
-                    onChange = viewModel::changeRule,
-                    onAdd = viewModel::addRule,
-                    onDelete = viewModel::deleteRule,
-                    onApply = {
+            AdaptiveRuleEditorPanel(
+                state = state,
+                onEdit = viewModel::editRule,
+                onChange = viewModel::changeRule,
+                onAdd = viewModel::addRule,
+                onDelete = viewModel::deleteRule,
+                onApply = {
+                    runtime?.let { current ->
+                        scope.launch { viewModel.applyAll(current) }
+                    }
+                },
+                onDismiss = { showRules = false },
+            )
+        }
+        if (showSettings) {
+            ModalBottomSheet(onDismissRequest = { showSettings = false }) {
+                ReaderSettingsSheet(
+                    fontScale = fontScale,
+                    onFontScaleChange = { scale ->
+                        fontScale = scale
+                        webView?.evaluateJavascript(
+                            "document.documentElement.style.fontSize='${(scale * 100).toInt()}%'",
+                            null,
+                        )
+                    },
+                    onClearWebData = {
+                        CookieManager.getInstance().removeAllCookies(null)
+                        WebStorage.getInstance().deleteAllData()
+                        webView?.clearFormData()
+                        webView?.clearCache(true)
+                        webView?.clearHistory()
+                    },
+                    onClearRules = {
                         runtime?.let { current ->
-                            scope.launch { viewModel.applyAll(current) }
+                            scope.launch { viewModel.clearRules(current) }
                         }
                     },
-                    onDismiss = { showRules = false },
+                    onClearHistory = onClearHistory,
+                    onClearEpubCache = onClearEpubCache,
                 )
             }
         }
@@ -493,7 +532,6 @@ private fun LoginBlockedContent(
 internal fun ReaderToolbar(
     ruleCount: Int,
     onRules: () -> Unit,
-    onClose: () -> Unit,
     showContents: Boolean,
     onContents: () -> Unit,
     hasPrevious: Boolean,
@@ -501,52 +539,42 @@ internal fun ReaderToolbar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val rows = readerToolbarRows(
-            widthDp = maxWidth.value.toInt(),
-            fontScale = density.fontScale,
-            hasPrevious = hasPrevious,
-            showContents = showContents,
-            hasNext = hasNext,
-        )
-        Column(
+    val actions = readerToolbarRows(
+        widthDp = 0,
+        fontScale = 1f,
+        hasPrevious = hasPrevious,
+        showContents = showContents,
+        hasNext = hasNext,
+    ).single()
+    BottomAppBar {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            rows.forEach { actions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+            actions.forEach { action ->
+                Button(
+                    onClick = when (action) {
+                        ReaderToolbarAction.Previous -> onPrevious
+                        ReaderToolbarAction.Contents -> onContents
+                        ReaderToolbarAction.Next -> onNext
+                        ReaderToolbarAction.Rules -> onRules
+                    },
+                    modifier = Modifier
+                        .widthIn(min = 96.dp)
+                        .heightIn(min = 48.dp),
                 ) {
-                    actions.forEach { action ->
-                        Button(
-                            onClick = when (action) {
-                                ReaderToolbarAction.Close -> onClose
-                                ReaderToolbarAction.Previous -> onPrevious
-                                ReaderToolbarAction.Contents -> onContents
-                                ReaderToolbarAction.Next -> onNext
-                                ReaderToolbarAction.Rules -> onRules
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp),
-                        ) {
-                            Text(
-                                text = when (action) {
-                                    ReaderToolbarAction.Close -> "关闭"
-                                    ReaderToolbarAction.Previous -> "上一章"
-                                    ReaderToolbarAction.Contents -> "目录"
-                                    ReaderToolbarAction.Next -> "下一章"
-                                    ReaderToolbarAction.Rules -> "规则 $ruleCount"
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                    Text(
+                        text = when (action) {
+                            ReaderToolbarAction.Previous -> "上一章"
+                            ReaderToolbarAction.Contents -> "目录"
+                            ReaderToolbarAction.Next -> "下一章"
+                            ReaderToolbarAction.Rules -> "规则 $ruleCount"
+                        },
+                    )
                 }
             }
         }
@@ -554,7 +582,6 @@ internal fun ReaderToolbar(
 }
 
 internal enum class ReaderToolbarAction {
-    Close,
     Previous,
     Contents,
     Next,
@@ -569,24 +596,12 @@ internal fun readerToolbarRows(
     hasNext: Boolean,
 ): List<List<ReaderToolbarAction>> {
     val actions = buildList {
-        add(ReaderToolbarAction.Close)
+        add(ReaderToolbarAction.Rules)
         if (hasPrevious) add(ReaderToolbarAction.Previous)
         if (showContents) add(ReaderToolbarAction.Contents)
         if (hasNext) add(ReaderToolbarAction.Next)
-        add(ReaderToolbarAction.Rules)
     }
-    val needsWrap = actions.size > 3 && widthDp < 480 * fontScale
-    if (!needsWrap) return listOf(actions)
-
-    val navigation = actions.filter {
-        it == ReaderToolbarAction.Close ||
-            it == ReaderToolbarAction.Previous ||
-            it == ReaderToolbarAction.Next
-    }
-    val tools = actions.filter {
-        it == ReaderToolbarAction.Contents || it == ReaderToolbarAction.Rules
-    }
-    return listOf(navigation, tools).filter(List<ReaderToolbarAction>::isNotEmpty)
+    return listOf(actions)
 }
 
 private fun NavigationDecision.message(): String = when (this) {

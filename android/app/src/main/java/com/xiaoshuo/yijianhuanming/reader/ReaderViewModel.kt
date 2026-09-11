@@ -99,11 +99,13 @@ class ReaderViewModel internal constructor(
             if (current.runtimeState is RuntimeState.OutOfSync) {
                 current
             } else {
+                val draft = current.draft.map { rule ->
+                    if (rule.id == id) rule.copy(source = source, target = target) else rule
+                }
+                val validated = validateRules(draft)
                 current.copy(
-                    draft = current.draft.map { rule ->
-                        if (rule.id == id) rule.copy(source = source, target = target) else rule
-                    },
-                    validationErrors = current.validationErrors - id,
+                    draft = draft,
+                    validationErrors = validated.errors,
                     applyState = ApplyState.Idle,
                     hasUnsavedChanges = true,
                     lastApplyResult = null,
@@ -121,10 +123,11 @@ class ReaderViewModel internal constructor(
             order = mutableState.value.draft.size,
         )
         mutableState.update {
+            val draft = it.draft + rule
             it.copy(
-                draft = it.draft + rule,
+                draft = draft,
                 editingRuleId = rule.id,
-                validationErrors = emptyMap(),
+                validationErrors = validateRules(draft).errors,
                 applyState = ApplyState.Idle,
                 hasUnsavedChanges = true,
                 lastApplyResult = null,
@@ -137,12 +140,13 @@ class ReaderViewModel internal constructor(
             if (current.runtimeState is RuntimeState.OutOfSync) {
                 current
             } else {
+                val draft = current.draft
+                    .filterNot { it.id == id }
+                    .mapIndexed { index, rule -> rule.copy(order = index) }
                 current.copy(
-                    draft = current.draft
-                        .filterNot { it.id == id }
-                        .mapIndexed { index, rule -> rule.copy(order = index) },
+                    draft = draft,
                     editingRuleId = current.editingRuleId.takeUnless { it == id },
-                    validationErrors = current.validationErrors - id,
+                    validationErrors = validateRules(draft).errors,
                     applyState = ApplyState.Idle,
                     hasUnsavedChanges = true,
                     lastApplyResult = null,
