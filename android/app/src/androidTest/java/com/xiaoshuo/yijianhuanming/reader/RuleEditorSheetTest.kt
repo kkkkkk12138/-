@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -254,8 +255,14 @@ class RuleEditorSheetTest {
         }
 
         compose.onNodeWithText("请输入原名").assertExists()
-        compose.onNodeWithText("关闭").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
-        compose.onNodeWithText("保存并生效").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("关闭")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("保存并生效")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
     }
 
     @Test
@@ -290,9 +297,11 @@ class RuleEditorSheetTest {
         }
 
         compose.onNodeWithText("保存并生效")
+            .performScrollTo()
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
         compose.onNodeWithText("关闭")
+            .performScrollTo()
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
     }

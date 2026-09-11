@@ -5,10 +5,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -40,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -163,13 +169,22 @@ fun RuleEditorSheet(
             else -> onDismiss()
         }
     }
-    Surface(modifier = modifier.fillMaxWidth().imePadding()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val compactHeight = maxHeight < 480.dp * LocalDensity.current.fontScale
+        val scrollState = rememberScrollState()
+        val surfaceModifier = if (compactHeight) {
+            Modifier.fillMaxSize()
+        } else {
+            Modifier.fillMaxSize().imePadding()
+        }
+        Surface(modifier = surfaceModifier) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (compactHeight) Modifier.verticalScroll(scrollState) else Modifier)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -189,12 +204,14 @@ fun RuleEditorSheet(
                     Text("关闭")
                 }
             }
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+                Column(
+                    modifier = if (compactHeight) {
+                        Modifier.fillMaxWidth()
+                    } else {
+                        Modifier.weight(1f, fill = false).verticalScroll(scrollState)
+                    },
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                 state.draft.forEach { rule ->
                     if (state.editingRuleId == rule.id) {
                         RuleEditRow(
@@ -235,25 +252,29 @@ fun RuleEditorSheet(
                     )
                 }
             }
-            Button(
-                onClick = onApply,
-                enabled = applyEnabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .semantics { contentDescription = "保存规则并应用到当前内容" },
-            ) {
-                if (state.isApplying) {
-                    CircularProgressIndicator()
-                    Text("正在应用", modifier = Modifier.padding(start = 8.dp))
-                } else {
-                    Text(
-                        when {
-                            state.draft.isEmpty() -> "应用并恢复原文"
-                            state.runtimeState == RuntimeState.Loading -> "正在准备阅读内容"
-                            else -> "保存并生效"
-                        },
-                    )
+                Button(
+                    onClick = onApply,
+                    enabled = applyEnabled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .semantics { contentDescription = "保存规则并应用到当前内容" },
+                ) {
+                    if (state.isApplying) {
+                        CircularProgressIndicator()
+                        Text("正在应用", modifier = Modifier.padding(start = 8.dp))
+                    } else {
+                        Text(
+                            when {
+                                state.draft.isEmpty() -> "应用并恢复原文"
+                                state.runtimeState == RuntimeState.Loading -> "正在准备阅读内容"
+                                else -> "保存并生效"
+                            },
+                        )
+                    }
+                }
+                if (compactHeight) {
+                    Spacer(Modifier.height(WindowInsets.ime.asPaddingValues().calculateBottomPadding()))
                 }
             }
         }
