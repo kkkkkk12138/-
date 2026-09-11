@@ -55,9 +55,9 @@ jobs:
       - name: Run Room migration, Compose, and WebView instrumentation
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36
+          api-level: 35
           arch: x86_64
-          target: aosp_atd
+          target: google_apis
           script: |
             run_suite() {
               suite="$1"
@@ -65,7 +65,7 @@ jobs:
               if "$@"; then
                 echo "${suite} passed"
               else
-                echo "::error title=${suite} failed::${suite} failed on API 36"
+                echo "::error title=${suite} failed::${suite} failed on API 35"
                 return 1
               fi
             }

@@ -79,7 +79,8 @@ describe('Android release', () => {
     expect(workflow).toContain('run_suite "Compose instrumentation"');
     expect(workflow).toContain('run_suite "Full instrumentation"');
     expect(workflow).toContain('::error title=${suite} failed');
-    expect(workflow).toContain('target: aosp_atd');
+    expect(workflow).toContain('api-level: 35');
+    expect(workflow).toContain('target: google_apis');
   });
 
   it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
